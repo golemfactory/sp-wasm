@@ -1,0 +1,19 @@
+[package]
+name = "sp-wasm"
+version = "0.1.0"
+authors = ["Jakub Konka <jakub.konka@golem.network>"]
+edition = "2018"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+docopt = "1"
+libc = "0.2"
+mozjs = "0.10"
+log = { version = "0.4", features = ["max_level_debug"] }
+
+[features]
+debugmozjs = ["mozjs/debugmozjs"]
+
+[[bin]]
+path = "src/main.rs"
+name = "sp_wasm"
