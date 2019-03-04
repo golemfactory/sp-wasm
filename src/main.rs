@@ -49,10 +49,9 @@ fn main() {
         logger::init().unwrap_or_else(|err| eprintln!("Failed to initialize logger: {}", err));
     }
 
-    let mut sandbox = Sandbox::new();
-    // sandbox.add_input_dir(args.arg_input_dir);
-    // sandbox.add_output_dir(args.arg_output_dir);
-    // sandbox.add_output_file(args.arg_output_file);
-    // sandbox.load_wasm(args.arg_wasm_js, args.arg_wasm);
-    sandbox.run();
+    let mut sandbox = Sandbox::new(&args.arg_input_dir, &args.arg_output_dir);
+    sandbox.map_dir(&args.arg_input_dir);
+    sandbox.map_dir(&args.arg_output_dir);
+    sandbox.add_output_file(&args.arg_output_file);
+    sandbox.run(&args.arg_wasm_js, &args.arg_wasm);
 }

@@ -1,3 +1,9 @@
+mod error_info;
+mod virtual_fs;
+
+use error_info::report_pending_exception;
+use virtual_fs::VirtualFS;
+
 use mozjs::glue::SetBuildId;
 use mozjs::jsapi::BuildIdCharVector;
 use mozjs::jsapi::CallArgs;
@@ -6,41 +12,55 @@ use mozjs::jsapi::ContextOptionsRef;
 use mozjs::jsapi::JSAutoCompartment;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
-use mozjs::jsapi::JS_ClearPendingException;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_EncodeStringToUTF8;
-use mozjs::jsapi::JS_IsExceptionPending;
 use mozjs::jsapi::JS_NewGlobalObject;
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetBuildIdOp;
 use mozjs::jsapi::Value;
 use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::wrappers::{JS_ErrorFromException, JS_GetPendingException};
-use mozjs::rust::{HandleObject, JSEngine, Runtime, SIMPLE_GLOBAL_CLASS};
+use mozjs::rust::{JSEngine, Runtime, SIMPLE_GLOBAL_CLASS};
 use mozjs::typedarray::{ArrayBuffer, CreateWith};
 
 use std::ffi::CStr;
 use std::fs::File;
 use std::io::prelude::*;
 use std::ptr;
-use std::slice::from_raw_parts;
 use std::str;
 
 pub struct Sandbox {
     runtime: Runtime,
     global: *mut JSObject,
-    javascript: String,
 }
 
 impl Sandbox {
-    pub fn new() -> Self {
+    pub fn new(input_dir: &str, output_dir: &str) -> Self {
         let engine =
             JSEngine::init().unwrap_or_else(|err| panic!("Error initializing JSEngine: {:?}", err));
         let runtime = Runtime::new(engine);
         let ctx = runtime.cx();
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
         let c_option = CompartmentOptions::default();
+
+        let global = unsafe {
+            JS_NewGlobalObject(
+                ctx,
+                &SIMPLE_GLOBAL_CLASS,
+                ptr::null_mut(),
+                h_option,
+                &c_option,
+            )
+        };
+
+        let sandbox = Sandbox { runtime, global };
+        sandbox.init();
+
+        sandbox
+    }
+
+    fn init(&self) {
+        let ctx = self.runtime.cx();
 
         unsafe {
             // runtime options
@@ -50,18 +70,11 @@ impl Sandbox {
             ctx_opts.set_wasmIon_(true);
             SetBuildIdOp(ctx, Some(sp_build_id));
 
-            let global = JS_NewGlobalObject(
-                ctx,
-                &SIMPLE_GLOBAL_CLASS,
-                ptr::null_mut(),
-                h_option,
-                &c_option,
-            );
-
-            rooted!(in(ctx) let global_root = global);
-
+            // callbacks
+            rooted!(in(ctx) let global_root = self.global);
             let gl = global_root.handle();
             let _ac = JSAutoCompartment::new(ctx, gl.get());
+
             JS_DefineFunction(
                 ctx,
                 gl.into(),
@@ -70,27 +83,17 @@ impl Sandbox {
                 0,
                 0,
             );
-            let _readWasm_fn = JS_DefineFunction(
-                ctx,
-                gl.into(),
-                b"readWasm\0".as_ptr() as *const libc::c_char,
-                Some(readWasm),
-                0,
-                0,
-            );
-
-            // init print funcs
-            let javascript = String::from("var Module = {'printErr': print, 'print': print};");
-
-            Sandbox {
-                runtime,
-                global,
-                javascript,
-            }
         }
+
+        // init print funcs
+        self.evaluate_script("var Module = {'printErr': print, 'print': print};");
     }
 
-    pub fn run(&self) {
+    pub fn map_dir(&mut self, input_dir: &str) {}
+
+    pub fn add_output_file(&mut self, output_file: &str) {}
+
+    pub fn run(&self, wasm_js: &str, wasm_bin: &str) {
         self.evaluate_script("print(1);")
     }
 
@@ -148,94 +151,4 @@ unsafe extern "C" fn print(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bo
 
     args.rval().set(UndefinedValue());
     true
-}
-
-/// A struct encapsulating information about a runtime script error.
-struct ErrorInfo {
-    /// The error message.
-    pub message: String,
-    /// The file name.
-    pub filename: String,
-    /// The line number.
-    pub lineno: libc::c_uint,
-    /// The column number.
-    pub column: libc::c_uint,
-}
-
-impl ErrorInfo {
-    unsafe fn from_native_error(cx: *mut JSContext, object: HandleObject) -> Option<ErrorInfo> {
-        let report = JS_ErrorFromException(cx, object);
-        if report.is_null() {
-            return None;
-        }
-
-        let filename = {
-            let filename = (*report)._base.filename as *const u8;
-            if !filename.is_null() {
-                let length = (0..).find(|idx| *filename.offset(*idx) == 0).unwrap();
-                let filename = from_raw_parts(filename, length as usize);
-                String::from_utf8_lossy(filename).into_owned()
-            } else {
-                "none".to_string()
-            }
-        };
-
-        let lineno = (*report)._base.lineno;
-        let column = (*report)._base.column;
-
-        let message = {
-            let message = (*report)._base.message_.data_ as *const u8;
-            let length = (0..).find(|idx| *message.offset(*idx) == 0).unwrap();
-            let message = from_raw_parts(message, length as usize);
-            String::from_utf8_lossy(message).into_owned()
-        };
-
-        Some(ErrorInfo {
-            filename,
-            message,
-            lineno,
-            column,
-        })
-    }
-}
-
-unsafe extern "C" fn report_pending_exception(ctx: *mut JSContext, dispatch_event: bool) {
-    if !JS_IsExceptionPending(ctx) {
-        return;
-    }
-
-    rooted!(in(ctx) let mut value = UndefinedValue());
-
-    if !JS_GetPendingException(ctx, value.handle_mut()) {
-        JS_ClearPendingException(ctx);
-        panic!("Uncaught exception: JS_GetPendingException failed");
-    }
-
-    JS_ClearPendingException(ctx);
-
-    if value.is_object() {
-        rooted!(in(ctx) let object = value.to_object());
-        let error_info =
-            ErrorInfo::from_native_error(ctx, object.handle()).unwrap_or_else(|| ErrorInfo {
-                message: format!("uncaught exception: unknown (can't convert to string)"),
-                filename: String::new(),
-                lineno: 0,
-                column: 0,
-            });
-
-        eprintln!(
-            "Error at {}:{}:{} {}",
-            error_info.filename, error_info.lineno, error_info.column, error_info.message
-        );
-    } else if value.is_string() {
-        rooted!(in(ctx) let object = value.to_string());
-        let message = JS_EncodeStringToUTF8(ctx, object.handle().into());
-        let message = std::ffi::CStr::from_ptr(message);
-        eprintln!(
-            "Error: {}",
-            String::from_utf8_lossy(message.to_bytes()).into_owned()
-        );
-    } else {
-        panic!("Uncaught exception: failed to stringify primitive");
-    };
 }
