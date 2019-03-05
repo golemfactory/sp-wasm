@@ -36,7 +36,7 @@ pub fn map_path<P: AsRef<path::Path>>(
             }
         } else {
             let mut file = repo.create_file(&rel_path)?;
-            let contents = read_file(&abs_path)?;
+            let contents = read_file_fs(&abs_path)?;
             file.write_once(&contents)?;
 
             log::debug!("copied file {:?} => {:?}", abs_path, rel_path);
@@ -45,7 +45,34 @@ pub fn map_path<P: AsRef<path::Path>>(
     Ok(())
 }
 
-pub fn read_file<P: AsRef<path::Path>>(path: P) -> io::Result<Vec<u8>> {
+pub fn visit<P: AsRef<path::Path>>(
+    repo: &zbox::Repo,
+    path: P,
+    cb: &mut FnMut(&zbox::DirEntry),
+) -> zbox::Result<()> {
+    let mut fifo = VecDeque::new();
+    fifo.push_back(path.as_ref().to_path_buf());
+
+    while let Some(path) = fifo.pop_front() {
+        if repo.is_dir(&path) {
+            for entry in repo.read_dir(path)? {
+                cb(&entry);
+                fifo.push_back(entry.path().to_path_buf());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn read_file<P: AsRef<path::Path>>(repo: &mut zbox::Repo, path: P) -> zbox::Result<Vec<u8>> {
+    let mut file = repo.open_file(path.as_ref())?;
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents)?;
+    Ok(contents)
+}
+
+pub fn read_file_fs<P: AsRef<path::Path>>(path: P) -> io::Result<Vec<u8>> {
     let mut file = fs::File::open(path)?;
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
