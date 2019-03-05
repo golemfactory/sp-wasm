@@ -58,7 +58,7 @@ impl Sandbox {
         Self::default()
     }
 
-    pub fn map_input_path(&mut self, input_path: &str) {
+    pub fn map_workspace(&mut self, input_path: &str) {
         log::info!("Mapping input directories at {}", input_path);
 
         let mut vfs = VFS.lock().unwrap();
@@ -94,19 +94,10 @@ impl Sandbox {
         .unwrap();
 
         js += "\n};";
-        println!("{}", js);
+
+        log::debug!("{}", js);
+
         self.evaluate_script(&js);
-    }
-
-    pub fn map_output_path(&mut self, output_path: &str) {
-        log::info!("Mapping output directories at {}", output_path);
-
-        map_path(&mut VFS.lock().unwrap(), output_path).unwrap_or_else(|err| {
-            panic!(
-                "Failed to map {} into VirtualFS with error {}",
-                output_path, err
-            )
-        })
     }
 
     pub fn run(&self, wasm_js: &str, wasm_bin: &str) {
@@ -121,6 +112,15 @@ impl Sandbox {
             .unwrap_or_else(|err| panic!("Failed to parse JavaScript with error {}", err));
         js += &wasm_js;
         self.evaluate_script(&js);
+        self.evaluate_script("writeFile('/out.txt', FS.readFile('/out.txt'));");
+
+        let vfs = &mut VFS.lock().unwrap();
+        assert!(vfs.is_file("/out.txt"));
+
+        println!(
+            "{}",
+            String::from_utf8(read_file(vfs, "/out.txt").unwrap()).unwrap()
+        );
     }
 
     fn init(&self) {
@@ -153,6 +153,15 @@ impl Sandbox {
                 gl.into(),
                 b"readFile\0".as_ptr() as *const libc::c_char,
                 Some(Self::read_file),
+                0,
+                0,
+            );
+
+            JS_DefineFunction(
+                ctx,
+                gl.into(),
+                b"writeFile\0".as_ptr() as *const libc::c_char,
+                Some(Self::write_file),
                 0,
                 0,
             );
@@ -205,6 +214,25 @@ impl Sandbox {
         ArrayBuffer::create(ctx, CreateWith::Slice(&contents), rval.handle_mut()).unwrap();
 
         args.rval().set(ObjectValue(rval.get()));
+        true
+    }
+
+    unsafe extern "C" fn write_file(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
+        let args = CallArgs::from_vp(vp, argc);
+
+        let arg = mozjs::rust::Handle::from_raw(args.get(0));
+        let filename = mozjs::rust::ToString(ctx, arg);
+
+        typedarray!(in(ctx) let contents: Uint8Array = args.get(1).to_object());
+        let contents: Vec<u8> = contents.unwrap().to_vec();
+
+        rooted!(in(ctx) let filename_root = filename);
+        let filename = JS_EncodeStringToUTF8(ctx, filename_root.handle().into());
+        let filename = CStr::from_ptr(filename);
+        let filename = str::from_utf8(filename.to_bytes()).unwrap();
+        write_file(&mut VFS.lock().unwrap(), filename, &contents).unwrap();
+
+        args.rval().set(UndefinedValue());
         true
     }
 
