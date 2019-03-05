@@ -72,6 +72,16 @@ pub fn read_file<P: AsRef<path::Path>>(repo: &mut zbox::Repo, path: P) -> zbox::
     Ok(contents)
 }
 
+pub fn write_file<P: AsRef<path::Path>>(
+    repo: &mut zbox::Repo,
+    path: P,
+    contents: &[u8],
+) -> zbox::Result<()> {
+    let mut file = repo.create_file(path.as_ref())?;
+    file.write_once(contents)?;
+    Ok(())
+}
+
 pub fn read_file_fs<P: AsRef<path::Path>>(path: P) -> io::Result<Vec<u8>> {
     let mut file = fs::File::open(path)?;
     let mut contents = Vec::new();

@@ -16,27 +16,18 @@ Standalone SpiderMonkey instance that can be used to run any Emscripten
 generated WASM according to the Golem calling convention.
 
 Usage:
-    sp_wasm -I <input-dir> -O <output-dir> -j <wasm-js> -w <wasm> -o <output-file> [-v | --verbose]
+    sp_wasm <workspace-dir> <wasm-js> <wasm>
     sp_wasm (-h | --help)
 
 Options:
-    -I              Path to the input directory.
-    -O              Path to the output directory.
-    -j              Path to the JS glue script.
-    -w              Path to the WASM binary.
-    -o              Path to the expected output file produced by WASM binary.
-    -v --verbose    Turn logging on.
     -h --help       Show this screen.
 ";
 
 #[derive(Debug, Deserialize)]
 struct Args {
-    arg_output_dir: String,
-    arg_input_dir: String,
+    arg_workspace_dir: String,
     arg_wasm_js: String,
     arg_wasm: String,
-    arg_output_file: String,
-    flag_verbose: bool,
 }
 
 fn main() {
@@ -45,7 +36,6 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     let mut sandbox = Sandbox::new();
-    sandbox.map_input_path(&args.arg_input_dir);
-    sandbox.map_output_path(&args.arg_output_dir);
+    sandbox.map_workspace(&args.arg_workspace_dir);
     sandbox.run(&args.arg_wasm_js, &args.arg_wasm);
 }
