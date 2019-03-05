@@ -9,7 +9,8 @@ serde = { version = "1", features = ["derive"] }
 docopt = "1"
 libc = "0.2"
 mozjs = "0.10"
-log = { version = "0.4", features = ["max_level_debug"] }
+env_logger = "0.6"
+log = "0.4"
 zbox = "0.6"
 
 [features]
