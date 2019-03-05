@@ -10,6 +10,7 @@ docopt = "1"
 libc = "0.2"
 mozjs = "0.10"
 log = { version = "0.4", features = ["max_level_debug"] }
+zbox = "0.6"
 
 [features]
 debugmozjs = ["mozjs/debugmozjs"]
