@@ -4,7 +4,6 @@
 extern crate mozjs;
 extern crate libc;
 
-mod logger;
 mod sandbox;
 
 use sandbox::Sandbox;
@@ -45,12 +44,8 @@ fn main() {
         .and_then(|dopt| dopt.deserialize())
         .unwrap_or_else(|e| e.exit());
 
-    if args.flag_verbose {
-        logger::init().unwrap_or_else(|err| eprintln!("Failed to initialize logger: {}", err));
-    }
-
     let mut sandbox = Sandbox::new();
-    sandbox.map_input_dir(&args.arg_input_dir);
-    sandbox.map_output_dir(&args.arg_output_dir, &args.arg_output_file);
+    sandbox.map_input_path(&args.arg_input_dir);
+    sandbox.map_output_path(&args.arg_output_dir);
     sandbox.run(&args.arg_wasm_js, &args.arg_wasm);
 }
