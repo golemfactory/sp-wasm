@@ -81,10 +81,10 @@ impl Sandbox {
     }
 
     pub fn run(&self, wasm_js: &str, wasm_bin: &str) {
-        {
-            let vfs = &mut VFS.lock().unwrap();
-            vfs.map_file(wasm_bin, "/main.wasm").unwrap();
-        }
+        VFS.lock()
+            .unwrap()
+            .map_file(wasm_bin, "/main.wasm")
+            .unwrap();
 
         let mut js = "Module['wasmBinary'] = readFile('/main.wasm');".to_string();
         let wasm_js = vfs::read_file(wasm_js).unwrap_or_else(|err| {
