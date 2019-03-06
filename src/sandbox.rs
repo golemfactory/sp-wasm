@@ -23,7 +23,6 @@ use mozjs::rust::{JSEngine, Runtime, SIMPLE_GLOBAL_CLASS};
 use mozjs::typedarray::{CreateWith, Uint8Array};
 
 use std::ffi::CStr;
-use std::path;
 use std::ptr;
 use std::str;
 
@@ -100,13 +99,14 @@ impl Sandbox {
     }
 
     pub fn save_output_files(&self, output_path: &str, output_file: &str) {
-        let mut output_path = path::PathBuf::from(output_path);
-        output_path.push(output_file);
+        let output_file = path_clean::clean(&("/".to_string() + output_file));
+        let output_path = output_path.to_string() + &output_file;
+
+        log::debug!("Saving output at {:?}", output_path);
 
         self.evaluate_script(&format!(
-            "writeFile('{}', FS.readFile('/{}'));",
-            output_path.to_str().unwrap(),
-            output_file
+            "writeFile('{}', FS.readFile('{}'));",
+            output_path, output_file
         ));
     }
 

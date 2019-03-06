@@ -37,6 +37,8 @@ fn main() {
         .and_then(|dopt| dopt.deserialize())
         .unwrap_or_else(|e| e.exit());
 
+    env_logger::init();
+
     let mut sandbox = Sandbox::new();
     sandbox.load_input_files(&args.arg_input_dir);
     sandbox.run(&args.arg_wasm_js, &args.arg_wasm);
