@@ -1,8 +1,7 @@
 mod error_info;
-mod file_manip;
+mod vfs;
 
 use error_info::*;
-use file_manip::*;
 
 use mozjs::glue::SetBuildId;
 use mozjs::jsapi::BuildIdCharVector;
@@ -21,31 +20,18 @@ use mozjs::jsapi::Value;
 use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
 use mozjs::rust::{JSEngine, Runtime, SIMPLE_GLOBAL_CLASS};
-use mozjs::typedarray::{ArrayBuffer, CreateWith};
+use mozjs::typedarray::{CreateWith, Uint8Array};
 
 use std::ffi::CStr;
+use std::path;
 use std::ptr;
 use std::str;
 
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
-const SANDBOX_PATH: &str = "sandbox";
-const SANDBOX_PWD: &str = "$andb0x_g0l3m_w@sm";
-
 lazy_static! {
-    static ref VFS: Mutex<zbox::Repo> = Mutex::new(
-        zbox::RepoOpener::new()
-            .create_new(true)
-            .open(&format!("file://{}", SANDBOX_PATH), SANDBOX_PWD)
-            .unwrap_or_else(|err| {
-                panic!(
-                    "Failed to create new VFS at {} with error: {}",
-                    format!("file://{}", SANDBOX_PATH),
-                    err,
-                )
-            })
-    );
+    static ref VFS: Mutex<vfs::VirtualFS> = Mutex::new(vfs::VirtualFS::new());
 }
 
 pub struct Sandbox {
@@ -58,40 +44,34 @@ impl Sandbox {
         Self::default()
     }
 
-    pub fn map_workspace(&mut self, input_path: &str) {
-        log::info!("Mapping input directories at {}", input_path);
-
-        let mut vfs = VFS.lock().unwrap();
-
-        map_path(&mut vfs, input_path).unwrap_or_else(|err| {
-            panic!(
-                "Failed to map {} into VirtualFS with error {}",
-                input_path, err
-            )
-        });
+    pub fn load_input_files(&mut self, input_path: &str) {
+        log::info!("Loading input files at {}", input_path);
 
         let mut js = "
         Module['preRun'] = function() {
         "
         .to_string();
 
-        let mut path = std::path::PathBuf::from("/");
-        path.push(std::path::Path::new(input_path).file_name().unwrap());
-
-        js += &format!("FS.mkdir('{}');", path.to_str().unwrap());
-
-        visit(&vfs, path, &mut |entry| {
-            if vfs.is_dir(entry.path()) {
-                js += &format!("\n\tFS.mkdir('{}');", entry.path().to_str().unwrap());
-            } else {
-                let s = entry.path().to_str().unwrap();
-                js += &format!(
-                    "\n\tFS.writeFile('{}', new Uint8Array(readFile('{}')));",
-                    s, s
-                );
+        let vfs = &mut VFS.lock().unwrap();
+        vfs.map_path(input_path, &mut |rel_path, node| {
+            let path = rel_path.to_str().unwrap();
+            match node {
+                vfs::FSNode::File(_) => {
+                    // create file
+                    js += &format!("\n\tFS.writeFile('{}', readFile('{}'));", path, path);
+                }
+                vfs::FSNode::Dir => {
+                    // create dir
+                    js += &format!("FS.mkdir('{}');", path);
+                }
             }
         })
-        .unwrap();
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to map {} into VirtualFS with error {}",
+                input_path, err
+            )
+        });
 
         js += "\n};";
 
@@ -101,8 +81,13 @@ impl Sandbox {
     }
 
     pub fn run(&self, wasm_js: &str, wasm_bin: &str) {
-        let mut js = format!("Module['wasmBinary'] = readFileFS('{}');", wasm_bin);
-        let wasm_js = read_file_fs(wasm_js).unwrap_or_else(|err| {
+        {
+            let vfs = &mut VFS.lock().unwrap();
+            vfs.map_file(wasm_bin, "/main.wasm").unwrap();
+        }
+
+        let mut js = "Module['wasmBinary'] = readFile('/main.wasm');".to_string();
+        let wasm_js = vfs::read_file(wasm_js).unwrap_or_else(|err| {
             panic!(
                 "Failed to read JavaScript file {} with error {}",
                 wasm_js, err
@@ -112,15 +97,17 @@ impl Sandbox {
             .unwrap_or_else(|err| panic!("Failed to parse JavaScript with error {}", err));
         js += &wasm_js;
         self.evaluate_script(&js);
-        self.evaluate_script("writeFile('/out.txt', FS.readFile('/out.txt'));");
+    }
 
-        let vfs = &mut VFS.lock().unwrap();
-        assert!(vfs.is_file("/out.txt"));
+    pub fn save_output_files(&self, output_path: &str, output_file: &str) {
+        let mut output_path = path::PathBuf::from(output_path);
+        output_path.push(output_file);
 
-        println!(
-            "{}",
-            String::from_utf8(read_file(vfs, "/out.txt").unwrap()).unwrap()
-        );
+        self.evaluate_script(&format!(
+            "writeFile('{}', FS.readFile('/{}'));",
+            output_path.to_str().unwrap(),
+            output_file
+        ));
     }
 
     fn init(&self) {
@@ -165,15 +152,6 @@ impl Sandbox {
                 0,
                 0,
             );
-
-            JS_DefineFunction(
-                ctx,
-                gl.into(),
-                b"readFileFS\0".as_ptr() as *const libc::c_char,
-                Some(Self::read_file_fs),
-                0,
-                0,
-            );
         }
 
         // init print funcs
@@ -208,10 +186,12 @@ impl Sandbox {
         let filename = JS_EncodeStringToUTF8(ctx, filename_root.handle().into());
         let filename = CStr::from_ptr(filename);
         let filename = str::from_utf8(filename.to_bytes()).unwrap();
-        let contents = read_file(&mut VFS.lock().unwrap(), filename).unwrap();
+
+        let vfs = VFS.lock().unwrap();
+        let contents = vfs.read_file(filename).unwrap();
 
         rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
-        ArrayBuffer::create(ctx, CreateWith::Slice(&contents), rval.handle_mut()).unwrap();
+        Uint8Array::create(ctx, CreateWith::Slice(&contents), rval.handle_mut()).unwrap();
 
         args.rval().set(ObjectValue(rval.get()));
         true
@@ -230,28 +210,9 @@ impl Sandbox {
         let filename = JS_EncodeStringToUTF8(ctx, filename_root.handle().into());
         let filename = CStr::from_ptr(filename);
         let filename = str::from_utf8(filename.to_bytes()).unwrap();
-        write_file(&mut VFS.lock().unwrap(), filename, &contents).unwrap();
+        vfs::write_file(filename, &contents).unwrap();
 
         args.rval().set(UndefinedValue());
-        true
-    }
-
-    unsafe extern "C" fn read_file_fs(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
-        let args = CallArgs::from_vp(vp, argc);
-
-        let arg = mozjs::rust::Handle::from_raw(args.get(0));
-        let filename = mozjs::rust::ToString(ctx, arg);
-
-        rooted!(in(ctx) let filename_root = filename);
-        let filename = JS_EncodeStringToUTF8(ctx, filename_root.handle().into());
-        let filename = CStr::from_ptr(filename);
-        let filename = str::from_utf8(filename.to_bytes()).unwrap();
-        let contents = read_file_fs(filename).unwrap();
-
-        rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
-        ArrayBuffer::create(ctx, CreateWith::Slice(&contents), rval.handle_mut()).unwrap();
-
-        args.rval().set(ObjectValue(rval.get()));
         true
     }
 
@@ -271,20 +232,6 @@ impl Sandbox {
         true
     }
 }
-
-// impl Drop for Sandbox {
-//     fn drop(&mut self) {
-//         // remove repo if was created successfully
-//         if let Ok(res) = zbox::Repo::exists(&format!("file://{}", Self::SANDBOX_PATH)) {
-//             if res {
-//                 std::fs::remove_dir_all(Self::SANDBOX_PATH)
-//                     .unwrap_or_else(|err| log::error!("Sandbox VirtualFS didn't exist: {:?}", err));
-
-//                 log::debug!("Sandbox VirtualFS removed");
-//             }
-//         }
-//     }
-// }
 
 impl Default for Sandbox {
     fn default() -> Self {
@@ -307,7 +254,6 @@ impl Default for Sandbox {
 
         let sandbox = Self { runtime, global };
         sandbox.init();
-        zbox::init_env();
 
         sandbox
     }
