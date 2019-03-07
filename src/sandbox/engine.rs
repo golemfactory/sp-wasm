@@ -37,68 +37,97 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Self {
-        Self::default()
+        let engine =
+            JSEngine::init().unwrap_or_else(|err| panic!("Error initializing JSEngine: {:?}", err));
+        let runtime = Runtime::new(engine);
+
+        unsafe { Self::create_with(runtime) }
     }
 
-    fn init(&self) {
-        let ctx = self.runtime.cx();
+    unsafe fn create_with(runtime: Runtime) -> Self {
+        let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
+        let c_option = CompartmentOptions::default();
+        let ctx = runtime.cx();
 
-        unsafe {
-            // runtime options
-            let ctx_opts = &mut *ContextOptionsRef(ctx);
-            ctx_opts.set_wasm_(true);
-            ctx_opts.set_wasmBaseline_(true);
-            ctx_opts.set_wasmIon_(true);
-            SetBuildIdOp(ctx, Some(Self::sp_build_id));
+        let global = JS_NewGlobalObject(
+            ctx,
+            &SIMPLE_GLOBAL_CLASS,
+            ptr::null_mut(),
+            h_option,
+            &c_option,
+        );
 
-            // callbacks
-            rooted!(in(ctx) let global_root = self.global);
-            let gl = global_root.handle();
-            let _ac = JSAutoCompartment::new(ctx, gl.get());
+        // runtime options
+        let ctx_opts = &mut *ContextOptionsRef(ctx);
+        ctx_opts.set_wasm_(true);
+        ctx_opts.set_wasmBaseline_(true);
+        ctx_opts.set_wasmIon_(true);
+        SetBuildIdOp(ctx, Some(Self::sp_build_id));
 
-            JS_DefineFunction(
-                ctx,
-                gl.into(),
-                b"print\0".as_ptr() as *const libc::c_char,
-                Some(Self::print),
-                0,
-                0,
-            );
+        // callbacks
+        rooted!(in(ctx) let global_root = global);
+        let gl = global_root.handle();
+        let _ac = JSAutoCompartment::new(ctx, gl.get());
 
-            JS_DefineFunction(
-                ctx,
-                gl.into(),
-                b"readFile\0".as_ptr() as *const libc::c_char,
-                Some(Self::read_file),
-                0,
-                0,
-            );
+        JS_DefineFunction(
+            ctx,
+            gl.into(),
+            b"print\0".as_ptr() as *const libc::c_char,
+            Some(Self::print),
+            0,
+            0,
+        );
 
-            JS_DefineFunction(
-                ctx,
-                gl.into(),
-                b"writeFile\0".as_ptr() as *const libc::c_char,
-                Some(Self::write_file),
-                0,
-                0,
-            );
-        }
+        JS_DefineFunction(
+            ctx,
+            gl.into(),
+            b"readFile\0".as_ptr() as *const libc::c_char,
+            Some(Self::read_file),
+            0,
+            0,
+        );
+
+        JS_DefineFunction(
+            ctx,
+            gl.into(),
+            b"writeFile\0".as_ptr() as *const libc::c_char,
+            Some(Self::write_file),
+            0,
+            0,
+        );
 
         // init print funcs
-        self.evaluate_script("var Module = {'printErr': print, 'print': print};");
+        Self::eval(
+            &runtime,
+            global,
+            "var Module = {'printErr': print, 'print': print};",
+        );
+
+        Self { runtime, global }
     }
 
-    pub fn evaluate_script(&self, script: &str) {
-        let ctx = self.runtime.cx();
+    unsafe fn eval<S>(runtime: &Runtime, global: *mut JSObject, script: S)
+    where
+        S: AsRef<str>,
+    {
+        let ctx = runtime.cx();
+
+        rooted!(in(ctx) let global_root = global);
+        let global = global_root.handle();
+        let _ac = JSAutoCompartment::new(ctx, global.get());
 
         rooted!(in(ctx) let mut rval = UndefinedValue());
-        rooted!(in(ctx) let global = self.global);
 
-        self.runtime
-            .evaluate_script(global.handle(), script, "noname", 0, rval.handle_mut())
-            .unwrap_or_else(|_| unsafe {
-                report_pending_exception(ctx, true);
-            });
+        runtime
+            .evaluate_script(global, script.as_ref(), "noname", 0, rval.handle_mut())
+            .unwrap_or_else(|_| report_pending_exception(ctx, true));
+    }
+
+    pub fn evaluate_script<S>(&self, script: S)
+    where
+        S: AsRef<str>,
+    {
+        unsafe { Self::eval(&self.runtime, self.global, script) }
     }
 
     unsafe extern "C" fn sp_build_id(build_id: *mut BuildIdCharVector) -> bool {
@@ -160,31 +189,6 @@ impl Engine {
 
         args.rval().set(UndefinedValue());
         true
-    }
-}
-
-impl Default for Engine {
-    fn default() -> Self {
-        let engine =
-            JSEngine::init().unwrap_or_else(|err| panic!("Error initializing JSEngine: {:?}", err));
-        let runtime = Runtime::new(engine);
-        let ctx = runtime.cx();
-        let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
-        let c_option = CompartmentOptions::default();
-
-        let global = unsafe {
-            JS_NewGlobalObject(
-                ctx,
-                &SIMPLE_GLOBAL_CLASS,
-                ptr::null_mut(),
-                h_option,
-                &c_option,
-            )
-        };
-
-        let engine = Self { runtime, global };
-        engine.init();
-        engine
     }
 }
 
@@ -264,6 +268,7 @@ pub unsafe extern "C" fn report_pending_exception(ctx: *mut JSContext, _dispatch
         rooted!(in(ctx) let object = value.to_string());
         let message = JS_EncodeStringToUTF8(ctx, object.handle().into());
         let message = std::ffi::CStr::from_ptr(message);
+
         eprintln!(
             "Error: {}",
             String::from_utf8_lossy(message.to_bytes()).into_owned()
