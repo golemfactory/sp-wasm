@@ -140,6 +140,14 @@ impl Engine {
     unsafe extern "C" fn read_file(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
         let args = CallArgs::from_vp(vp, argc);
 
+        if args.argc_ != 1 {
+            JS_ReportErrorASCII(
+                ctx,
+                b"readFile(filename) requires exactly 1 argument\0".as_ptr() as *const libc::c_char,
+            );
+            return false;
+        }
+
         let arg = Handle::from_raw(args.get(0));
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
@@ -155,6 +163,15 @@ impl Engine {
 
     unsafe extern "C" fn write_file(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
         let args = CallArgs::from_vp(vp, argc);
+
+        if args.argc_ != 2 {
+            JS_ReportErrorASCII(
+                ctx,
+                b"writeFile(filename, data) requires exactly 2 arguments\0".as_ptr()
+                    as *const libc::c_char,
+            );
+            return false;
+        }
 
         let arg = Handle::from_raw(args.get(0));
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
@@ -174,7 +191,7 @@ impl Engine {
         if args.argc_ > 1 {
             JS_ReportErrorASCII(
                 ctx,
-                b"print() requires 0 or 1 arguments\0".as_ptr() as *const libc::c_char,
+                b"print(msg=\"\") requires 0 or 1 arguments\0".as_ptr() as *const libc::c_char,
             );
             return false;
         }
