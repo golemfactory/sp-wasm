@@ -9,6 +9,7 @@ use mozjs::jsapi::ContextOptionsRef;
 use mozjs::jsapi::JSAutoCompartment;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
+use mozjs::jsapi::JSString;
 use mozjs::jsapi::JS_ClearPendingException;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_EncodeStringToUTF8;
@@ -24,9 +25,9 @@ use mozjs::rust::HandleObject;
 use mozjs::rust::{JSEngine, Runtime, SIMPLE_GLOBAL_CLASS};
 use mozjs::typedarray::{CreateWith, Uint8Array};
 
-use std::slice::from_raw_parts;
+use std::slice;
 
-use std::ffi::CStr;
+use std::ffi;
 use std::ptr;
 use std::str;
 
@@ -139,12 +140,7 @@ impl Engine {
         let args = CallArgs::from_vp(vp, argc);
 
         let arg = mozjs::rust::Handle::from_raw(args.get(0));
-        let filename = mozjs::rust::ToString(ctx, arg);
-
-        rooted!(in(ctx) let filename_root = filename);
-        let filename = JS_EncodeStringToUTF8(ctx, filename_root.handle().into());
-        let filename = CStr::from_ptr(filename);
-        let filename = str::from_utf8(filename.to_bytes()).unwrap();
+        let filename = js_string_to_utf8(ctx, mozjs::rust::ToString(ctx, arg));
 
         let vfs = VFS.lock().unwrap();
         let contents = vfs.get_file_contents(filename).unwrap();
@@ -160,15 +156,11 @@ impl Engine {
         let args = CallArgs::from_vp(vp, argc);
 
         let arg = mozjs::rust::Handle::from_raw(args.get(0));
-        let filename = mozjs::rust::ToString(ctx, arg);
+        let filename = js_string_to_utf8(ctx, mozjs::rust::ToString(ctx, arg));
 
         typedarray!(in(ctx) let contents: Uint8Array = args.get(1).to_object());
         let contents: Vec<u8> = contents.unwrap().to_vec();
 
-        rooted!(in(ctx) let filename_root = filename);
-        let filename = JS_EncodeStringToUTF8(ctx, filename_root.handle().into());
-        let filename = CStr::from_ptr(filename);
-        let filename = str::from_utf8(filename.to_bytes()).unwrap();
         vfs::write_file(filename, &contents).unwrap();
 
         args.rval().set(UndefinedValue());
@@ -179,13 +171,9 @@ impl Engine {
         let args = CallArgs::from_vp(vp, argc);
 
         let arg = mozjs::rust::Handle::from_raw(args.get(0));
-        let js = mozjs::rust::ToString(ctx, arg);
+        let message = js_string_to_utf8(ctx, mozjs::rust::ToString(ctx, arg));
 
-        rooted!(in(ctx) let message_root = js);
-        let message = JS_EncodeStringToUTF8(ctx, message_root.handle().into());
-        let message = CStr::from_ptr(message);
-
-        println!("{}", str::from_utf8(message.to_bytes()).unwrap());
+        println!("{}", message);
 
         args.rval().set(UndefinedValue());
         true
@@ -210,7 +198,7 @@ impl ErrorInfo {
             let filename = (*report)._base.filename as *const u8;
             if !filename.is_null() {
                 let length = (0..).find(|idx| *filename.offset(*idx) == 0).unwrap();
-                let filename = from_raw_parts(filename, length as usize);
+                let filename = slice::from_raw_parts(filename, length as usize);
                 String::from_utf8_lossy(filename).into_owned()
             } else {
                 "none".to_string()
@@ -223,7 +211,7 @@ impl ErrorInfo {
         let message = {
             let message = (*report)._base.message_.data_ as *const u8;
             let length = (0..).find(|idx| *message.offset(*idx) == 0).unwrap();
-            let message = from_raw_parts(message, length as usize);
+            let message = slice::from_raw_parts(message, length as usize);
             String::from_utf8_lossy(message).into_owned()
         };
 
@@ -265,15 +253,16 @@ pub unsafe extern "C" fn report_pending_exception(ctx: *mut JSContext, _dispatch
             error_info.filename, error_info.lineno, error_info.column, error_info.message
         );
     } else if value.is_string() {
-        rooted!(in(ctx) let object = value.to_string());
-        let message = JS_EncodeStringToUTF8(ctx, object.handle().into());
-        let message = std::ffi::CStr::from_ptr(message);
-
-        eprintln!(
-            "Error: {}",
-            String::from_utf8_lossy(message.to_bytes()).into_owned()
-        );
+        let message = js_string_to_utf8(ctx, value.to_string());
+        eprintln!("Error: {}", message);
     } else {
         panic!("Uncaught exception: failed to stringify primitive");
     };
+}
+
+unsafe fn js_string_to_utf8(ctx: *mut JSContext, js_string: *mut JSString) -> String {
+    rooted!(in(ctx) let string_root = js_string);
+    let string = JS_EncodeStringToUTF8(ctx, string_root.handle().into());
+    let string = ffi::CStr::from_ptr(string);
+    String::from_utf8_lossy(string.to_bytes()).into_owned()
 }
