@@ -87,7 +87,7 @@ impl VirtualFS {
 impl Default for VirtualFS {
     fn default() -> Self {
         Self {
-            mapping: BTreeMap::default(),
+            mapping: BTreeMap::new(),
         }
     }
 }
