@@ -16,7 +16,7 @@ Standalone SpiderMonkey instance that can be used to run any Emscripten
 generated WASM according to the Golem calling convention.
 
 Usage:
-    sp_wasm -I <input-dir> -O <output-dir> -j <wasm-js> -w <wasm> -o <output-file>
+    sp_wasm -I <input-dir> -O <output-dir> -j <wasm-js> -w <wasm> -o <output-file>...
     sp_wasm (-h | --help)
 
 Options:
@@ -29,7 +29,7 @@ struct Args {
     arg_output_dir: String,
     arg_wasm_js: String,
     arg_wasm: String,
-    arg_output_file: String,
+    arg_output_file: Vec<String>,
 }
 
 fn main() {
@@ -40,7 +40,7 @@ fn main() {
     env_logger::init();
 
     let mut sandbox = Sandbox::new();
-    sandbox.load_input_files(&args.arg_input_dir);
-    sandbox.run(&args.arg_wasm_js, &args.arg_wasm);
-    sandbox.save_output_files(&args.arg_output_dir, &args.arg_output_file);
+    sandbox.load_input_files(args.arg_input_dir);
+    sandbox.run(args.arg_wasm_js, args.arg_wasm);
+    sandbox.save_output_files(args.arg_output_dir, args.arg_output_file.into_iter());
 }
