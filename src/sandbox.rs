@@ -43,8 +43,11 @@ impl Sandbox {
         Self::default()
     }
 
-    pub fn load_input_files(&mut self, input_path: &str) {
-        log::info!("Loading input files at {}", input_path);
+    pub fn load_input_files<S>(&mut self, input_path: S)
+    where
+        S: AsRef<str>,
+    {
+        log::info!("Loading input files at {}", input_path.as_ref());
 
         let mut js = "
         Module['preRun'] = function() {
@@ -52,7 +55,7 @@ impl Sandbox {
         .to_string();
 
         let vfs = &mut VFS.lock().unwrap();
-        vfs.map_path(input_path, &mut |rel_path, node| {
+        vfs.map_path(input_path.as_ref(), &mut |rel_path, node| {
             let path = rel_path.to_str().unwrap();
             match node {
                 vfs::FSNode::File(_) => {
@@ -68,7 +71,8 @@ impl Sandbox {
         .unwrap_or_else(|err| {
             panic!(
                 "Failed to map {} into VirtualFS with error {}",
-                input_path, err
+                input_path.as_ref(),
+                err
             )
         });
 
@@ -79,17 +83,21 @@ impl Sandbox {
         self.evaluate_script(&js);
     }
 
-    pub fn run(&self, wasm_js: &str, wasm_bin: &str) {
+    pub fn run<S>(&self, wasm_js: S, wasm_bin: S)
+    where
+        S: AsRef<str>,
+    {
         VFS.lock()
             .unwrap()
-            .map_file(wasm_bin, "/main.wasm")
+            .map_file(wasm_bin.as_ref(), "/main.wasm")
             .unwrap();
 
         let mut js = "Module['wasmBinary'] = readFile('/main.wasm');".to_string();
-        let wasm_js = vfs::read_file(wasm_js).unwrap_or_else(|err| {
+        let wasm_js = vfs::read_file(wasm_js.as_ref()).unwrap_or_else(|err| {
             panic!(
                 "Failed to read JavaScript file {} with error {}",
-                wasm_js, err
+                wasm_js.as_ref(),
+                err
             )
         });
         let wasm_js = String::from_utf8(wasm_js)
@@ -98,16 +106,23 @@ impl Sandbox {
         self.evaluate_script(&js);
     }
 
-    pub fn save_output_files(&self, output_path: &str, output_file: &str) {
-        let output_file = path_clean::clean(&("/".to_string() + output_file));
-        let output_path = output_path.to_string() + &output_file;
+    pub fn save_output_files<S, It>(&self, output_path: S, output_files: It)
+    where
+        S: AsRef<str>,
+        It: IntoIterator,
+        It::Item: AsRef<str>,
+    {
+        for output_file in output_files {
+            let output_file = path_clean::clean(&("/".to_string() + output_file.as_ref()));
+            let output_path = output_path.as_ref().to_string() + &output_file;
 
-        log::debug!("Saving output at {:?}", output_path);
+            log::debug!("Saving output at {:?}", output_path);
 
-        self.evaluate_script(&format!(
-            "writeFile('{}', FS.readFile('{}'));",
-            output_path, output_file
-        ));
+            self.evaluate_script(&format!(
+                "writeFile('{}', FS.readFile('{}'));",
+                output_path, output_file
+            ));
+        }
     }
 
     fn init(&self) {
