@@ -15,6 +15,7 @@ use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_EncodeStringToUTF8;
 use mozjs::jsapi::JS_IsExceptionPending;
 use mozjs::jsapi::JS_NewGlobalObject;
+use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetBuildIdOp;
 use mozjs::jsapi::Value;
@@ -22,7 +23,7 @@ use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
 use mozjs::rust::wrappers::{JS_ErrorFromException, JS_GetPendingException};
 use mozjs::rust::HandleObject;
-use mozjs::rust::{JSEngine, Runtime, SIMPLE_GLOBAL_CLASS};
+use mozjs::rust::{Handle, JSEngine, Runtime, ToString, SIMPLE_GLOBAL_CLASS};
 use mozjs::typedarray::{CreateWith, Uint8Array};
 
 use std::slice;
@@ -139,8 +140,8 @@ impl Engine {
     unsafe extern "C" fn read_file(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
         let args = CallArgs::from_vp(vp, argc);
 
-        let arg = mozjs::rust::Handle::from_raw(args.get(0));
-        let filename = js_string_to_utf8(ctx, mozjs::rust::ToString(ctx, arg));
+        let arg = Handle::from_raw(args.get(0));
+        let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
         let vfs = VFS.lock().unwrap();
         let contents = vfs.get_file_contents(filename).unwrap();
@@ -155,8 +156,8 @@ impl Engine {
     unsafe extern "C" fn write_file(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
         let args = CallArgs::from_vp(vp, argc);
 
-        let arg = mozjs::rust::Handle::from_raw(args.get(0));
-        let filename = js_string_to_utf8(ctx, mozjs::rust::ToString(ctx, arg));
+        let arg = Handle::from_raw(args.get(0));
+        let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
         typedarray!(in(ctx) let contents: Uint8Array = args.get(1).to_object());
         let contents: Vec<u8> = contents.unwrap().to_vec();
@@ -170,8 +171,20 @@ impl Engine {
     unsafe extern "C" fn print(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
         let args = CallArgs::from_vp(vp, argc);
 
-        let arg = mozjs::rust::Handle::from_raw(args.get(0));
-        let message = js_string_to_utf8(ctx, mozjs::rust::ToString(ctx, arg));
+        if args.argc_ > 1 {
+            JS_ReportErrorASCII(
+                ctx,
+                b"print() requires 0 or 1 arguments\0".as_ptr() as *const libc::c_char,
+            );
+            return false;
+        }
+
+        let message = if args.argc_ == 0 {
+            "".to_string()
+        } else {
+            let arg = Handle::from_raw(args.get(0));
+            js_string_to_utf8(ctx, ToString(ctx, arg))
+        };
 
         println!("{}", message);
 
