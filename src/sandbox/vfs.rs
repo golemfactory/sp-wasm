@@ -18,11 +18,10 @@ impl VirtualFS {
         Self::default()
     }
 
-    pub fn map_file<P: AsRef<path::Path>>(
-        &mut self,
-        abs_path: P,
-        rel_path: P,
-    ) -> io::Result<&FSNode> {
+    pub fn map_file<P>(&mut self, abs_path: P, rel_path: P) -> io::Result<&FSNode>
+    where
+        P: AsRef<path::Path>,
+    {
         let contents = read_file(&abs_path)?;
         self.mapping.insert(
             rel_path.as_ref().to_string_lossy().into(),
@@ -31,17 +30,23 @@ impl VirtualFS {
         Ok(&self.mapping[rel_path.as_ref().to_str().unwrap()])
     }
 
-    pub fn map_dir<P: AsRef<path::Path>>(&mut self, path: P) -> io::Result<&FSNode> {
+    pub fn map_dir<P>(&mut self, path: P) -> io::Result<&FSNode>
+    where
+        P: AsRef<path::Path>,
+    {
         self.mapping
             .insert(path.as_ref().to_string_lossy().into(), FSNode::Dir);
         Ok(&self.mapping[path.as_ref().to_str().unwrap()])
     }
 
-    pub fn map_path<P: AsRef<path::Path>>(
+    pub fn map_path<P>(
         &mut self,
         path: P,
         cb: &mut FnMut(&path::Path, &FSNode),
-    ) -> Result<(), Box<dyn StdError>> {
+    ) -> Result<(), Box<dyn StdError>>
+    where
+        P: AsRef<path::Path>,
+    {
         let mut rel_path = path::PathBuf::from("/");
         rel_path.push(path.as_ref().file_name().ok_or(error::RelativePathError)?);
         let abs_path = path::PathBuf::from(path.as_ref());
@@ -74,13 +79,14 @@ impl VirtualFS {
         Ok(())
     }
 
-    pub fn read_file(&self, path: &str) -> Option<&[u8]> {
-        self.mapping
-            .get(&String::from(path))
-            .and_then(|node| match node {
-                FSNode::File(ref contents) => Some(contents.as_slice()),
-                FSNode::Dir => None,
-            })
+    pub fn get_file_contents<S>(&self, path: S) -> Option<&[u8]>
+    where
+        S: Into<String>,
+    {
+        self.mapping.get(&path.into()).and_then(|node| match node {
+            FSNode::File(ref contents) => Some(contents.as_slice()),
+            FSNode::Dir => None,
+        })
     }
 }
 
@@ -92,14 +98,20 @@ impl Default for VirtualFS {
     }
 }
 
-pub fn read_file<P: AsRef<path::Path>>(path: P) -> io::Result<Vec<u8>> {
+pub fn read_file<P>(path: P) -> io::Result<Vec<u8>>
+where
+    P: AsRef<path::Path>,
+{
     let mut file = fs::File::open(path)?;
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
     Ok(contents)
 }
 
-pub fn write_file<P: AsRef<path::Path>>(path: P, contents: &[u8]) -> io::Result<()> {
+pub fn write_file<P>(path: P, contents: &[u8]) -> io::Result<()>
+where
+    P: AsRef<path::Path>,
+{
     let mut file = fs::File::create(path.as_ref())?;
     file.write_all(contents)?;
     Ok(())
