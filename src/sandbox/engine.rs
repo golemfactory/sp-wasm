@@ -147,7 +147,7 @@ impl Engine {
         let filename = str::from_utf8(filename.to_bytes()).unwrap();
 
         let vfs = VFS.lock().unwrap();
-        let contents = vfs.read_file(filename).unwrap();
+        let contents = vfs.get_file_contents(filename).unwrap();
 
         rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
         Uint8Array::create(ctx, CreateWith::Slice(&contents), rval.handle_mut()).unwrap();
