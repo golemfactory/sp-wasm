@@ -151,13 +151,26 @@ impl Engine {
         let arg = Handle::from_raw(args.get(0));
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
-        let vfs = VFS.lock().unwrap();
-        let contents = vfs.get_file_contents(filename).unwrap();
+        if let Err(err) = (|| -> Result<(), Box<dyn std::error::Error>> {
+            let vfs = VFS.lock().unwrap();
+            let contents = vfs.get_file_contents(filename)?;
 
-        rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
-        Uint8Array::create(ctx, CreateWith::Slice(&contents), rval.handle_mut()).unwrap();
+            rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
+            Uint8Array::create(ctx, CreateWith::Slice(&contents), rval.handle_mut())
+                .or_else(|_| Err(error::Uint8ArrayConversionError))?;
 
-        args.rval().set(ObjectValue(rval.get()));
+            args.rval().set(ObjectValue(rval.get()));
+            Ok(())
+        })() {
+            JS_ReportErrorASCII(
+                ctx,
+                format!("failed to read file with error: {}\0", err)
+                    .as_bytes()
+                    .as_ptr() as *const libc::c_char,
+            );
+            return false;
+        }
+
         true
     }
 
@@ -295,4 +308,20 @@ unsafe fn js_string_to_utf8(ctx: *mut JSContext, js_string: *mut JSString) -> St
     let string = JS_EncodeStringToUTF8(ctx, string_root.handle().into());
     let string = ffi::CStr::from_ptr(string);
     String::from_utf8_lossy(string.to_bytes()).into_owned()
+}
+
+pub mod error {
+    use std::error::Error;
+    use std::fmt;
+
+    #[derive(Debug)]
+    pub struct Uint8ArrayConversionError;
+
+    impl Error for Uint8ArrayConversionError {}
+
+    impl fmt::Display for Uint8ArrayConversionError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "couldn't convert &[u8] to Uint8Array")
+        }
+    }
 }

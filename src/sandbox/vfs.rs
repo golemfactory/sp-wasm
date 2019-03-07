@@ -79,14 +79,18 @@ impl VirtualFS {
         Ok(())
     }
 
-    pub fn get_file_contents<S>(&self, path: S) -> Option<&[u8]>
+    pub fn get_file_contents<S>(&self, path: S) -> Result<&[u8], error::FileNotMappedError>
     where
         S: Into<String>,
     {
-        self.mapping.get(&path.into()).and_then(|node| match node {
-            FSNode::File(ref contents) => Some(contents.as_slice()),
-            FSNode::Dir => None,
-        })
+        let path = path.into();
+        self.mapping
+            .get(&path)
+            .and_then(|node| match node {
+                FSNode::File(ref contents) => Some(contents.as_slice()),
+                FSNode::Dir => None,
+            })
+            .ok_or_else(|| error::FileNotMappedError(path))
     }
 }
 
@@ -129,6 +133,17 @@ pub mod error {
     impl fmt::Display for RelativePathError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "couldn't extract relative path")
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct FileNotMappedError(pub String);
+
+    impl Error for FileNotMappedError {}
+
+    impl fmt::Display for FileNotMappedError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "file {} was not mapped", self.0)
         }
     }
 }
