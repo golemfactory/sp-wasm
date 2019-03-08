@@ -39,8 +39,11 @@ fn main() {
 
     env_logger::init();
 
-    let mut sandbox = Sandbox::new();
-    sandbox.load_input_files(args.arg_input_dir);
-    sandbox.run(args.arg_wasm_js, args.arg_wasm);
-    sandbox.save_output_files(args.arg_output_dir, args.arg_output_file.into_iter());
+    Sandbox::new()
+        .and_then(|sandbox| sandbox.load_input_files(&args.arg_input_dir))
+        .and_then(|sandbox| sandbox.run(&args.arg_wasm_js, &args.arg_wasm))
+        .and_then(|sandbox| {
+            sandbox.save_output_files(&args.arg_output_dir, args.arg_output_file.iter())
+        })
+        .unwrap_or_else(|err| eprintln!("{}", err));
 }
