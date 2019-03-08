@@ -87,14 +87,15 @@ impl Sandbox {
         It::Item: AsRef<str>,
     {
         for output_file in output_files {
-            let output_file = path_clean::clean(&("/".to_string() + output_file.as_ref()));
-            let output_path = output_path.as_ref().to_string() + &output_file;
+            let mut output_path = std::path::PathBuf::from(output_path.as_ref());
+            output_path.push(vfs::sanitize_path(output_file.as_ref())?);
 
             log::debug!("Saving output at {:?}", output_path);
 
             self.engine.evaluate_script(&format!(
                 "writeFile('{}', FS.readFile('{}'));",
-                output_path, output_file
+                output_path.as_path().to_string_lossy(),
+                output_file.as_ref()
             ))?;
         }
 

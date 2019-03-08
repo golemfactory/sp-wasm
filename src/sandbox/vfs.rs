@@ -4,6 +4,8 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path;
 
+use path_clean::PathClean;
+
 pub enum FSNode {
     File(Vec<u8>),
     Dir,
@@ -119,6 +121,16 @@ where
     file.write_all(contents)
 }
 
+pub fn sanitize_path<P>(path: P) -> Result<path::PathBuf, path::StripPrefixError>
+where
+    P: AsRef<path::Path>,
+{
+    let mut sanitized = path::PathBuf::from("/");
+    sanitized.push(path.as_ref());
+    let sanitized = sanitized.clean();
+    sanitized.strip_prefix("/").map(path::PathBuf::from)
+}
+
 pub mod error {
     use std::error::Error;
     use std::fmt;
@@ -143,5 +155,28 @@ pub mod error {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "file {} was not mapped", self.0)
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::path::PathBuf;
+
+    #[test]
+    fn sanitize_path() {
+        assert_eq!(
+            Ok(PathBuf::from("out.txt")),
+            super::sanitize_path("../../../out.txt")
+        );
+
+        assert_eq!(
+            Ok(PathBuf::from("out.txt")),
+            super::sanitize_path("out/../../../out.txt")
+        );
+
+        assert_eq!(
+            Ok(PathBuf::from("out/out.txt")),
+            super::sanitize_path("out/../out/../out/../out/out.txt")
+        );
     }
 }
