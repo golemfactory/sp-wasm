@@ -97,7 +97,20 @@ impl Engine {
         Self::eval(
             &runtime,
             global,
-            "var Module = {'printErr': print, 'print': print};",
+            "var Module = { 'printErr': print, 'print': print };",
+        )?;
+
+        // init /dev/random emulation
+        // WARNING this is NOT cryptographically secure!
+        Self::eval(
+            &runtime,
+            global,
+            "var crypto = {
+                getRandomValues: function(array) {
+                    for (var i = 0; i < array.length; i++)
+                        array[i] = (Math.random() * 256) | 0
+                }
+            };",
         )?;
 
         Ok(Self { runtime, global })
