@@ -1,5 +1,5 @@
 # SpiderMonkey-based WebAssembly Sandbox
-[![Build Status][travis]] [![Rustc Version Nightly]][rustc]
+[![Build Status]][travis] [![Rustc Version Nightly]][rustc]
 
 [Build Status]: https://travis-ci.org/golemfactory/sp-wasm.svg?branch=master
 [travis]: http://travis-ci.org/golemfactory/sp-wasm
