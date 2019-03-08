@@ -10,10 +10,8 @@ use mozjs::jsapi::JSAutoCompartment;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSString;
-use mozjs::jsapi::JS_ClearPendingException;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_EncodeStringToUTF8;
-use mozjs::jsapi::JS_IsExceptionPending;
 use mozjs::jsapi::JS_NewGlobalObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::OnNewGlobalHookOption;
@@ -21,16 +19,10 @@ use mozjs::jsapi::SetBuildIdOp;
 use mozjs::jsapi::Value;
 use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::wrappers::{JS_ErrorFromException, JS_GetPendingException};
-use mozjs::rust::HandleObject;
 use mozjs::rust::{Handle, JSEngine, Runtime, ToString, SIMPLE_GLOBAL_CLASS};
 use mozjs::typedarray::{CreateWith, Uint8Array};
 
-use std::slice;
-
-use std::ffi;
 use std::ptr;
-use std::str;
 
 pub struct Engine {
     runtime: Runtime,
@@ -38,15 +30,17 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new() -> Self {
-        let engine =
-            JSEngine::init().unwrap_or_else(|err| panic!("Error initializing JSEngine: {:?}", err));
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let engine = JSEngine::init().map_err(error::JSEngineError)?;
         let runtime = Runtime::new(engine);
 
-        unsafe { Self::create_with(runtime) }
+        unsafe {
+            let engine = Self::create_with(runtime)?;
+            Ok(engine)
+        }
     }
 
-    unsafe fn create_with(runtime: Runtime) -> Self {
+    unsafe fn create_with(runtime: Runtime) -> Result<Self, error::JSError> {
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
         let c_option = CompartmentOptions::default();
         let ctx = runtime.cx();
@@ -103,12 +97,16 @@ impl Engine {
             &runtime,
             global,
             "var Module = {'printErr': print, 'print': print};",
-        );
+        )?;
 
-        Self { runtime, global }
+        Ok(Self { runtime, global })
     }
 
-    unsafe fn eval<S>(runtime: &Runtime, global: *mut JSObject, script: S)
+    unsafe fn eval<S>(
+        runtime: &Runtime,
+        global: *mut JSObject,
+        script: S,
+    ) -> Result<(), error::JSError>
     where
         S: AsRef<str>,
     {
@@ -122,10 +120,10 @@ impl Engine {
 
         runtime
             .evaluate_script(global, script.as_ref(), "noname", 0, rval.handle_mut())
-            .unwrap_or_else(|_| report_pending_exception(ctx, true));
+            .map_err(|_| error::JSError::new(ctx))
     }
 
-    pub fn evaluate_script<S>(&self, script: S)
+    pub fn evaluate_script<S>(&self, script: S) -> Result<(), error::JSError>
     where
         S: AsRef<str>,
     {
@@ -235,96 +233,26 @@ impl Engine {
     }
 }
 
-struct ErrorInfo {
-    pub message: String,
-    pub filename: String,
-    pub lineno: libc::c_uint,
-    pub column: libc::c_uint,
-}
-
-impl ErrorInfo {
-    unsafe fn from_native_error(cx: *mut JSContext, object: HandleObject) -> Option<ErrorInfo> {
-        let report = JS_ErrorFromException(cx, object);
-        if report.is_null() {
-            return None;
-        }
-
-        let filename = {
-            let filename = (*report)._base.filename as *const u8;
-            if !filename.is_null() {
-                let length = (0..).find(|idx| *filename.offset(*idx) == 0).unwrap();
-                let filename = slice::from_raw_parts(filename, length as usize);
-                String::from_utf8_lossy(filename).into_owned()
-            } else {
-                "none".to_string()
-            }
-        };
-
-        let lineno = (*report)._base.lineno;
-        let column = (*report)._base.column;
-
-        let message = {
-            let message = (*report)._base.message_.data_ as *const u8;
-            let length = (0..).find(|idx| *message.offset(*idx) == 0).unwrap();
-            let message = slice::from_raw_parts(message, length as usize);
-            String::from_utf8_lossy(message).into_owned()
-        };
-
-        Some(ErrorInfo {
-            filename,
-            message,
-            lineno,
-            column,
-        })
-    }
-}
-
-pub unsafe extern "C" fn report_pending_exception(ctx: *mut JSContext, _dispatch_event: bool) {
-    if !JS_IsExceptionPending(ctx) {
-        return;
-    }
-
-    rooted!(in(ctx) let mut value = UndefinedValue());
-
-    if !JS_GetPendingException(ctx, value.handle_mut()) {
-        JS_ClearPendingException(ctx);
-        panic!("Uncaught exception: JS_GetPendingException failed");
-    }
-
-    JS_ClearPendingException(ctx);
-
-    if value.is_object() {
-        rooted!(in(ctx) let object = value.to_object());
-        let error_info =
-            ErrorInfo::from_native_error(ctx, object.handle()).unwrap_or_else(|| ErrorInfo {
-                message: "uncaught exception: unknown (can't convert to string)".to_string(),
-                filename: String::new(),
-                lineno: 0,
-                column: 0,
-            });
-
-        eprintln!(
-            "Error at {}:{}:{} {}",
-            error_info.filename, error_info.lineno, error_info.column, error_info.message
-        );
-    } else if value.is_string() {
-        let message = js_string_to_utf8(ctx, value.to_string());
-        eprintln!("Error: {}", message);
-    } else {
-        panic!("Uncaught exception: failed to stringify primitive");
-    };
-}
-
 unsafe fn js_string_to_utf8(ctx: *mut JSContext, js_string: *mut JSString) -> String {
     rooted!(in(ctx) let string_root = js_string);
     let string = JS_EncodeStringToUTF8(ctx, string_root.handle().into());
-    let string = ffi::CStr::from_ptr(string);
+    let string = std::ffi::CStr::from_ptr(string);
     String::from_utf8_lossy(string.to_bytes()).into_owned()
 }
 
 pub mod error {
+    use super::js_string_to_utf8;
+    use super::JSContext;
+    use super::UndefinedValue;
+
+    use mozjs::jsapi::JS_ClearPendingException;
+    use mozjs::jsapi::JS_IsExceptionPending;
+    use mozjs::rust::wrappers::{JS_ErrorFromException, JS_GetPendingException};
+    use mozjs::rust::HandleObject;
+
     use std::error::Error;
     use std::fmt;
+    use std::slice;
 
     #[derive(Debug)]
     pub struct SliceToUint8ArrayConversionError;
@@ -345,6 +273,128 @@ pub mod error {
     impl fmt::Display for Uint8ArrayToVecConversionError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "couldn't convert Uint8Array to Vec<u8>")
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct JSEngineError(pub mozjs::rust::JSEngineError);
+
+    impl Error for JSEngineError {}
+
+    impl fmt::Display for JSEngineError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "error initializing JSEngine: {:?}", self.0)
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct JSError {
+        message: String,
+        filename: String,
+        lineno: libc::c_uint,
+        column: libc::c_uint,
+    }
+
+    impl JSError {
+        pub fn new(ctx: *mut JSContext) -> Self {
+            unsafe { Self::create_with(ctx) }
+        }
+
+        unsafe fn create_with(ctx: *mut JSContext) -> Self {
+            if !JS_IsExceptionPending(ctx) {
+                return Self {
+                    message: "Uncaught exception: exception reported but not pending".to_string(),
+                    filename: String::new(),
+                    lineno: 0,
+                    column: 0,
+                };
+            }
+
+            rooted!(in(ctx) let mut value = UndefinedValue());
+
+            if !JS_GetPendingException(ctx, value.handle_mut()) {
+                JS_ClearPendingException(ctx);
+                return Self {
+                    message: "Uncaught exception: JS_GetPendingException failed".to_string(),
+                    filename: String::new(),
+                    lineno: 0,
+                    column: 0,
+                };
+            }
+
+            JS_ClearPendingException(ctx);
+
+            if value.is_object() {
+                rooted!(in(ctx) let object = value.to_object());
+                Self::from_native_error(ctx, object.handle()).unwrap_or_else(|| Self {
+                    message: "Uncaught exception: unknown (can't convert to string)".to_string(),
+                    filename: String::new(),
+                    lineno: 0,
+                    column: 0,
+                })
+            } else if value.is_string() {
+                let message = js_string_to_utf8(ctx, value.to_string());
+                Self {
+                    message,
+                    filename: String::new(),
+                    lineno: 0,
+                    column: 0,
+                }
+            } else {
+                Self {
+                    message: "Uncaught exception: failed to stringify primitive".to_string(),
+                    filename: String::new(),
+                    lineno: 0,
+                    column: 0,
+                }
+            }
+        }
+
+        unsafe fn from_native_error(ctx: *mut JSContext, obj: HandleObject) -> Option<Self> {
+            let report = JS_ErrorFromException(ctx, obj);
+            if report.is_null() {
+                return None;
+            }
+
+            let filename = {
+                let filename = (*report)._base.filename as *const u8;
+                if !filename.is_null() {
+                    let length = (0..).find(|idx| *filename.offset(*idx) == 0).unwrap();
+                    let filename = slice::from_raw_parts(filename, length as usize);
+                    String::from_utf8_lossy(filename).into_owned()
+                } else {
+                    "none".to_string()
+                }
+            };
+
+            let lineno = (*report)._base.lineno;
+            let column = (*report)._base.column;
+
+            let message = {
+                let message = (*report)._base.message_.data_ as *const u8;
+                let length = (0..).find(|idx| *message.offset(*idx) == 0).unwrap();
+                let message = slice::from_raw_parts(message, length as usize);
+                String::from_utf8_lossy(message).into_owned()
+            };
+
+            Some(Self {
+                filename,
+                message,
+                lineno,
+                column,
+            })
+        }
+    }
+
+    impl Error for JSError {}
+
+    impl fmt::Display for JSError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                f,
+                "JavaScript error at {}:{}:{} {}",
+                self.filename, self.lineno, self.column, self.message
+            )
         }
     }
 }

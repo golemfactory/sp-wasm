@@ -3,6 +3,8 @@ mod vfs;
 
 use self::engine::*;
 
+use std::error::Error;
+
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
@@ -15,11 +17,13 @@ pub struct Sandbox {
 }
 
 impl Sandbox {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new() -> Result<Self, Box<dyn Error>> {
+        let engine = Engine::new()?;
+
+        Ok(Self { engine })
     }
 
-    pub fn load_input_files<S>(&mut self, input_path: S)
+    pub fn load_input_files<S>(self, input_path: S) -> Result<Self, Box<dyn Error>>
     where
         S: AsRef<str>,
     {
@@ -30,59 +34,53 @@ impl Sandbox {
         "
         .to_string();
 
-        let vfs = &mut VFS.lock().unwrap();
-        vfs.map_path(input_path.as_ref(), &mut |rel_path, node| {
-            let path = rel_path.to_str().unwrap();
-            match node {
-                vfs::FSNode::File(_) => {
-                    // create file
-                    js += &format!("\n\tFS.writeFile('{}', readFile('{}'));", path, path);
+        VFS.lock()
+            .unwrap()
+            .map_path(input_path.as_ref(), &mut |rel_path, node| {
+                let path: String = rel_path.to_string_lossy().into();
+                match node {
+                    vfs::FSNode::File(_) => {
+                        // create file
+                        js += &format!("\n\tFS.writeFile('{}', readFile('{}'));", path, path);
+                    }
+                    vfs::FSNode::Dir => {
+                        // create dir
+                        js += &format!("FS.mkdir('{}');", path);
+                    }
                 }
-                vfs::FSNode::Dir => {
-                    // create dir
-                    js += &format!("FS.mkdir('{}');", path);
-                }
-            }
-        })
-        .unwrap_or_else(|err| {
-            panic!(
-                "Failed to map {} into VirtualFS with error {}",
-                input_path.as_ref(),
-                err
-            )
-        });
+            })?;
 
         js += "\n};";
 
         log::debug!("{}", js);
 
-        self.engine.evaluate_script(&js);
+        self.engine.evaluate_script(&js)?;
+
+        Ok(self)
     }
 
-    pub fn run<S>(&self, wasm_js: S, wasm_bin: S)
+    pub fn run<S>(self, wasm_js: S, wasm_bin: S) -> Result<Self, Box<dyn Error>>
     where
         S: AsRef<str>,
     {
         VFS.lock()
             .unwrap()
-            .map_file(wasm_bin.as_ref(), "/main.wasm")
-            .unwrap();
+            .map_file(wasm_bin.as_ref(), "/main.wasm")?;
 
         let mut js = "Module['wasmBinary'] = readFile('/main.wasm');".to_string();
-        let wasm_js = vfs::read_file(wasm_js.as_ref()).unwrap_or_else(|err| {
-            panic!(
-                "Failed to read JavaScript file {} with error {}",
-                wasm_js.as_ref(),
-                err
-            )
-        });
-        let wasm_js = String::from_utf8(wasm_js)
-            .unwrap_or_else(|err| panic!("Failed to parse JavaScript with error {}", err));
+        let wasm_js = vfs::read_file(wasm_js.as_ref())?;
+        let wasm_js = String::from_utf8(wasm_js)?;
         js += &wasm_js;
-        self.engine.evaluate_script(&js);
+        self.engine.evaluate_script(&js)?;
+
+        Ok(self)
     }
 
-    pub fn save_output_files<S, It>(&self, output_path: S, output_files: It)
+    pub fn save_output_files<S, It>(
+        self,
+        output_path: S,
+        output_files: It,
+    ) -> Result<(), Box<dyn Error>>
     where
         S: AsRef<str>,
         It: IntoIterator,
@@ -97,15 +95,9 @@ impl Sandbox {
             self.engine.evaluate_script(&format!(
                 "writeFile('{}', FS.readFile('{}'));",
                 output_path, output_file
-            ));
+            ))?;
         }
-    }
-}
 
-impl Default for Sandbox {
-    fn default() -> Self {
-        Self {
-            engine: Engine::new(),
-        }
+        Ok(())
     }
 }
