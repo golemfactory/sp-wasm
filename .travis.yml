@@ -1,0 +1,26 @@
+language: rust
+rust:
+  - nightly
+matrix:
+  include:
+    - os: linux
+      dist: xenial
+    - os: osx
+      osx_image: xcode10.1
+compiler: clang
+fast_finish: true
+sudo: true
+addons:
+  apt:
+    packages:
+      - autoconf2.13
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install autoconf@2.13; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install yasm; fi
+branches:
+  only:
+    - master
+script:
+  - travis_wait 30 cargo build 
+  - cargo test
