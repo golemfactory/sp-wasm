@@ -157,7 +157,7 @@ impl Engine {
 
             rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
             Uint8Array::create(ctx, CreateWith::Slice(&contents), rval.handle_mut())
-                .or_else(|_| Err(error::Uint8ArrayConversionError))?;
+                .map_err(|_| error::SliceToUint8ArrayConversionError)?;
 
             args.rval().set(ObjectValue(rval.get()));
             Ok(())
@@ -189,10 +189,22 @@ impl Engine {
         let arg = Handle::from_raw(args.get(0));
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
-        typedarray!(in(ctx) let contents: Uint8Array = args.get(1).to_object());
-        let contents: Vec<u8> = contents.unwrap().to_vec();
-
-        vfs::write_file(filename, &contents).unwrap();
+        if let Err(err) = (|| -> Result<(), Box<dyn std::error::Error>> {
+            typedarray!(in(ctx) let contents: Uint8Array = args.get(1).to_object());
+            let contents: Vec<u8> = contents
+                .map_err(|_| error::Uint8ArrayToVecConversionError)?
+                .to_vec();
+            vfs::write_file(filename, &contents)?;
+            Ok(())
+        })() {
+            JS_ReportErrorASCII(
+                ctx,
+                format!("failed to write file with error: {}\0", err)
+                    .as_bytes()
+                    .as_ptr() as *const libc::c_char,
+            );
+            return false;
+        }
 
         args.rval().set(UndefinedValue());
         true
@@ -315,13 +327,24 @@ pub mod error {
     use std::fmt;
 
     #[derive(Debug)]
-    pub struct Uint8ArrayConversionError;
+    pub struct SliceToUint8ArrayConversionError;
 
-    impl Error for Uint8ArrayConversionError {}
+    impl Error for SliceToUint8ArrayConversionError {}
 
-    impl fmt::Display for Uint8ArrayConversionError {
+    impl fmt::Display for SliceToUint8ArrayConversionError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "couldn't convert &[u8] to Uint8Array")
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Uint8ArrayToVecConversionError;
+
+    impl Error for Uint8ArrayToVecConversionError {}
+
+    impl fmt::Display for Uint8ArrayToVecConversionError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "couldn't convert Uint8Array to Vec<u8>")
         }
     }
 }

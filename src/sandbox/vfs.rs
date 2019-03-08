@@ -23,20 +23,19 @@ impl VirtualFS {
         P: AsRef<path::Path>,
     {
         let contents = read_file(&abs_path)?;
-        self.mapping.insert(
-            rel_path.as_ref().to_string_lossy().into(),
-            FSNode::File(contents),
-        );
-        Ok(&self.mapping[rel_path.as_ref().to_str().unwrap()])
+        let rel_path: String = rel_path.as_ref().to_string_lossy().into();
+        self.mapping
+            .insert(rel_path.clone(), FSNode::File(contents));
+        Ok(&self.mapping[&rel_path])
     }
 
     pub fn map_dir<P>(&mut self, path: P) -> io::Result<&FSNode>
     where
         P: AsRef<path::Path>,
     {
-        self.mapping
-            .insert(path.as_ref().to_string_lossy().into(), FSNode::Dir);
-        Ok(&self.mapping[path.as_ref().to_str().unwrap()])
+        let path: String = path.as_ref().to_string_lossy().into();
+        self.mapping.insert(path.clone(), FSNode::Dir);
+        Ok(&self.mapping[&path])
     }
 
     pub fn map_path<P>(
@@ -117,8 +116,7 @@ where
     P: AsRef<path::Path>,
 {
     let mut file = fs::File::create(path.as_ref())?;
-    file.write_all(contents)?;
-    Ok(())
+    file.write_all(contents)
 }
 
 pub mod error {
