@@ -3,6 +3,7 @@ mod vfs;
 
 use self::engine::*;
 
+use itertools::Itertools;
 use std::error::Error;
 
 use lazy_static::lazy_static;
@@ -21,6 +22,23 @@ impl Sandbox {
         let engine = Engine::new()?;
 
         Ok(Self { engine })
+    }
+
+    pub fn set_exec_args<It>(self, exec_args: It) -> Result<Self, Box<dyn Error>>
+    where
+        It: IntoIterator,
+        It::Item: AsRef<str>,
+    {
+        let js = format!(
+            "Module['arguments'] = [ {} ];",
+            exec_args
+                .into_iter()
+                .map(|s| format!("'{}'", s.as_ref()))
+                .join(", ")
+        );
+        log::debug!("{}", js);
+        self.engine.evaluate_script(&js)?;
+        Ok(self)
     }
 
     pub fn load_input_files<S>(self, input_path: S) -> Result<Self, Box<dyn Error>>

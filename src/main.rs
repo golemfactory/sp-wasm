@@ -16,20 +16,28 @@ Standalone SpiderMonkey instance that can be used to run any Emscripten
 generated WASM according to the Golem calling convention.
 
 Usage:
-    sp_wasm -I <input-dir> -O <output-dir> -j <wasm-js> -w <wasm> -o <output-file>...
+    sp_wasm -I <input-dir> -O <output-dir> -j <wasm-js> -w <wasm> -o <output-file>... [-- <args>...]
     sp_wasm (-h | --help)
 
 Options:
-    -h --help       Show this screen.
+    -I <input-dir>          Path to the input dir.
+    -O <output-dir>         Path to the output dir.
+    -j <wasm-js>            Path to the Emscripten JavaScript glue code.
+    -w <wasm-bin>           Path to the Emscripten WASM binary.
+    -o <output-file>        Path to expected file.
+    <args>                  WASM program arguments. 
+    -h --help               Show this screen.
 ";
 
+#[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
 struct Args {
-    arg_input_dir: String,
-    arg_output_dir: String,
-    arg_wasm_js: String,
-    arg_wasm: String,
-    arg_output_file: Vec<String>,
+    flag_I: String,
+    flag_O: String,
+    flag_j: String,
+    flag_w: String,
+    flag_o: Vec<String>,
+    arg_args: Vec<String>,
 }
 
 fn main() {
@@ -40,10 +48,9 @@ fn main() {
     env_logger::init();
 
     Sandbox::new()
-        .and_then(|sandbox| sandbox.load_input_files(&args.arg_input_dir))
-        .and_then(|sandbox| sandbox.run(&args.arg_wasm_js, &args.arg_wasm))
-        .and_then(|sandbox| {
-            sandbox.save_output_files(&args.arg_output_dir, args.arg_output_file.iter())
-        })
+        .and_then(|sandbox| sandbox.set_exec_args(args.arg_args.iter()))
+        .and_then(|sandbox| sandbox.load_input_files(&args.flag_I))
+        .and_then(|sandbox| sandbox.run(&args.flag_j, &args.flag_w))
+        .and_then(|sandbox| sandbox.save_output_files(&args.flag_O, args.flag_o.iter()))
         .unwrap_or_else(|err| eprintln!("{}", err));
 }
