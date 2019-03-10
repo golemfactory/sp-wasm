@@ -31,6 +31,7 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        log::info!("Initializing SpiderMonkey engine");
         let engine = JSEngine::init().map_err(error::JSEngineError)?;
         let runtime = Runtime::new(engine);
 
@@ -127,6 +128,7 @@ impl Engine {
     where
         S: AsRef<str>,
     {
+        log::debug!("Evaluating script {}", script.as_ref());
         unsafe { Self::eval(&self.runtime, self.global, script) }
     }
 
