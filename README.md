@@ -1,10 +1,12 @@
 # SpiderMonkey-based WebAssembly Sandbox
-[![Build Status]][travis] [![Rustc Version Nightly]][rustc]
+[![Build Status]][travis] [![Rustc 1.33]][rustc] [![License]][license]
 
 [Build Status]: https://travis-ci.org/golemfactory/sp-wasm.svg?branch=master
 [travis]: http://travis-ci.org/golemfactory/sp-wasm
-[Rustc Version Nightly]: https://img.shields.io/badge/rustc-nightly-lightgray.svg
-[rustc]: https://doc.rust-lang.org/nightly/
+[Rustc 1.33]: https://img.shields.io/badge/rustc-1.33+-lightgray.svg
+[rustc]: https://blog.rust-lang.org/2019/02/28/Rust-1.33.0.html
+[License]: https://img.shields.io/github/license/golemfactory/sp-wasm.svg 
+[license]: https://www.gnu.org/licenses/gpl-3.0.en.html
 
 A proof-of-concept implementation of standalone WebAssembly sandbox using embedded SpiderMonkey engine. For `v8` version, see [golemfactory/wasm](https://github.com/golemfactory/wasm).
 
