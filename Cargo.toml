@@ -21,3 +21,6 @@ debugmozjs = ["mozjs/debugmozjs"]
 [[bin]]
 path = "src/main.rs"
 name = "sp_wasm"
+
+[profile.release]
+lto = true

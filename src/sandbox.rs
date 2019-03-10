@@ -29,15 +29,15 @@ impl Sandbox {
         It: IntoIterator,
         It::Item: AsRef<str>,
     {
-        let js = format!(
-            "Module['arguments'] = [ {} ];",
-            exec_args
-                .into_iter()
-                .map(|s| format!("'{}'", s.as_ref()))
-                .join(", ")
-        );
-        log::debug!("{}", js);
+        let exec_args = exec_args
+            .into_iter()
+            .map(|s| format!("'{}'", s.as_ref()))
+            .join(", ");
+        log::info!("Setting exec args [ {} ]", exec_args);
+
+        let js = format!("Module['arguments'] = [ {} ];", exec_args);
         self.engine.evaluate_script(&js)?;
+
         Ok(self)
     }
 
@@ -69,9 +69,6 @@ impl Sandbox {
             })?;
 
         js += "\n};";
-
-        log::debug!("{}", js);
-
         self.engine.evaluate_script(&js)?;
 
         Ok(self)
@@ -81,6 +78,8 @@ impl Sandbox {
     where
         S: AsRef<str>,
     {
+        log::info!("Running WASM {}", wasm_bin.as_ref());
+
         VFS.lock()
             .unwrap()
             .map_file(wasm_bin.as_ref(), "/main.wasm")?;
@@ -108,7 +107,10 @@ impl Sandbox {
             let mut output_path = std::path::PathBuf::from(output_path.as_ref());
             output_path.push(vfs::sanitize_path(output_file.as_ref())?);
 
-            log::debug!("Saving output at {:?}", output_path);
+            log::info!(
+                "Saving output at {}",
+                output_path.as_path().to_string_lossy()
+            );
 
             self.engine.evaluate_script(&format!(
                 "writeFile('{}', FS.readFile('{}'));",

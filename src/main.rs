@@ -45,7 +45,7 @@ fn main() {
         .and_then(|dopt| dopt.deserialize())
         .unwrap_or_else(|e| e.exit());
 
-    env_logger::init();
+    env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
 
     Sandbox::new()
         .and_then(|sandbox| sandbox.set_exec_args(args.arg_args.iter()))
