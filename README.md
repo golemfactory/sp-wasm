@@ -16,12 +16,6 @@ The implementation depends on [servo/rust-mozjs](https://github.com/servo/rust-m
 Rust bindings, and as such, requires C/C++ compiler and Autoconf 2.13.
 See [servo/mozjs/README.md](https://github.com/servo/mozjs) for detailed building instructions.
 
-Additionally, you will need `nightly` toolchain installed. Assuming you're using `rustup` to manage your rust versions, run
-
-```
-$ rustup override set nightly
-```
-
 After following the aforementioned instructions, to build the sandbox, run
 
 ```
