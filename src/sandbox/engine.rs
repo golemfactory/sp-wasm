@@ -20,7 +20,7 @@ use mozjs::jsapi::Value;
 use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
 use mozjs::rust::{Handle, JSEngine, Runtime, ToString, SIMPLE_GLOBAL_CLASS};
-use mozjs::typedarray::{CreateWith, Uint8Array};
+use mozjs::typedarray::{ArrayBuffer, CreateWith};
 
 use std::ptr;
 
@@ -156,7 +156,7 @@ impl Engine {
             let contents = vfs.get_file_contents(filename)?;
 
             rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
-            Uint8Array::create(ctx, CreateWith::Slice(&contents), rval.handle_mut())
+            ArrayBuffer::create(ctx, CreateWith::Slice(&contents), rval.handle_mut())
                 .map_err(|_| error::SliceToUint8ArrayConversionError)?;
 
             args.rval().set(ObjectValue(rval.get()));
@@ -190,7 +190,7 @@ impl Engine {
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
         if let Err(err) = (|| -> Result<(), Box<dyn std::error::Error>> {
-            typedarray!(in(ctx) let contents: Uint8Array = args.get(1).to_object());
+            typedarray!(in(ctx) let contents: ArrayBufferView = args.get(1).to_object());
             let contents: Vec<u8> = contents
                 .map_err(|_| error::Uint8ArrayToVecConversionError)?
                 .to_vec();

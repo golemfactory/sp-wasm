@@ -11,4 +11,4 @@ ENV CPP="clang-6.0 -E"
 ENV CXX=clang++-6.0
 RUN cargo install --path . && cargo clean
 
-ENTRYPOINT [ "sp_wasm" ]
+ENTRYPOINT ["sp_wasm"]
