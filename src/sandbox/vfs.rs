@@ -48,8 +48,7 @@ impl VirtualFS {
     where
         P: AsRef<path::Path>,
     {
-        let mut rel_path = path::PathBuf::from("/");
-        rel_path.push(path.as_ref().file_name().ok_or(error::RelativePathError)?);
+        let rel_path = path::PathBuf::from("/");
         let abs_path = path::PathBuf::from(path.as_ref());
 
         let mut fifo = VecDeque::new();

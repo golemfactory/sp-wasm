@@ -59,11 +59,16 @@ impl Sandbox {
                 match node {
                     vfs::FSNode::File(_) => {
                         // create file
-                        js += &format!("\n\tFS.writeFile('{}', readFile('{}'));", path, path);
+                        js += &format!(
+                            "\n\tFS.writeFile('{}', new Uint8Array(readFile('{}')));",
+                            path, path
+                        );
                     }
                     vfs::FSNode::Dir => {
                         // create dir
-                        js += &format!("FS.mkdir('{}');", path);
+                        if path != "/" {
+                            js += &format!("FS.mkdir('{}');", path);
+                        }
                     }
                 }
             })?;
