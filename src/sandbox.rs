@@ -1,5 +1,5 @@
-mod engine;
-mod vfs;
+pub mod engine;
+pub mod vfs;
 
 use self::engine::*;
 
@@ -125,5 +125,9 @@ impl Sandbox {
         }
 
         Ok(())
+    }
+
+    pub fn engine(&self) -> &Engine {
+        &self.engine
     }
 }
