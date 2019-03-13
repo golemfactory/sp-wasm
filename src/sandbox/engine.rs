@@ -101,14 +101,18 @@ impl Engine {
         )?;
 
         // init /dev/random emulation
-        // WARNING this is NOT cryptographically secure!
         Self::eval(
             &runtime,
             global,
-            "var crypto = {
+            "var golem_MAGIC = 0;
+            golem_randEmu = function() {
+                golem_MAGIC = Math.pow(golem_MAGIC + 1.8912, 3) % 1;
+                return golem_MAGIC;
+            };
+            var crypto = {
                 getRandomValues: function(array) {
                     for (var i = 0; i < array.length; i++)
-                        array[i] = (Math.random() * 256) | 0
+                        array[i] = (golem_randEmu() * 256) | 0
                 }
             };",
         )?;
@@ -120,7 +124,7 @@ impl Engine {
         runtime: &Runtime,
         global: *mut JSObject,
         script: S,
-    ) -> Result<(), error::JSError>
+    ) -> Result<Value, error::JSError>
     where
         S: AsRef<str>,
     {
@@ -132,12 +136,17 @@ impl Engine {
 
         rooted!(in(ctx) let mut rval = UndefinedValue());
 
-        runtime
+        if runtime
             .evaluate_script(global, script.as_ref(), "noname", 0, rval.handle_mut())
-            .map_err(|_| error::JSError::new(ctx))
+            .is_err()
+        {
+            return Err(error::JSError::new(ctx));
+        }
+
+        Ok(rval.get())
     }
 
-    pub fn evaluate_script<S>(&self, script: S) -> Result<(), error::JSError>
+    pub fn evaluate_script<S>(&self, script: S) -> Result<Value, error::JSError>
     where
         S: AsRef<str>,
     {

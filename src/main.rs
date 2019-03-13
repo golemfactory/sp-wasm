@@ -1,12 +1,6 @@
 #![warn(clippy::all)]
 
-#[macro_use]
-extern crate mozjs;
-extern crate libc;
-
-mod sandbox;
-
-use sandbox::Sandbox;
+use sp_wasm::prelude::*;
 
 use docopt::Docopt;
 use serde::Deserialize;
