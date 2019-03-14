@@ -1,0 +1,12 @@
+[package]
+name = "sp-wasm-tests"
+version = "0.1.0"
+authors = ["Jakub Konka <jakub.konka@golem.network>"]
+edition = "2018"
+
+[dependencies]
+sp-wasm-lib = { path = "../sp-wasm-lib" }
+
+[[bin]]
+name = "sp_wasm_tests"
+path = "src/main.rs"
