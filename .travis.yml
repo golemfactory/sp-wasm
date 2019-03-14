@@ -24,3 +24,4 @@ branches:
 script:
   - travis_wait 30 cargo build 
   - cargo test
+  - ./target/debug/sp_wasm_tests
