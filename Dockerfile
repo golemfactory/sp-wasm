@@ -14,4 +14,4 @@ RUN cargo install --path .
 WORKDIR /sp-wasm
 RUN cargo clean
 
-ENTRYPOINT ["sp_wasm"]
+ENTRYPOINT ["wasm-sandbox"]

@@ -15,5 +15,5 @@ log = "0.4"
 debugmozjs = ["sp-wasm-lib/debugmozjs"]
 
 [[bin]]
-name = "sp_wasm"
+name = "wasm-sandbox"
 path = "src/main.rs"
