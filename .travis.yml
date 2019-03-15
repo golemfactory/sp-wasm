@@ -9,6 +9,7 @@ matrix:
       osx_image: xcode10.1
 compiler: clang
 fast_finish: true
+cache: cargo
 sudo: true
 addons:
   apt:
