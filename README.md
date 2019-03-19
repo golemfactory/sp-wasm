@@ -8,10 +8,13 @@
 [License]: https://img.shields.io/github/license/golemfactory/sp-wasm.svg 
 [license]: https://www.gnu.org/licenses/gpl-3.0.en.html
 
-A standalone WebAssembly sandbox using embedded SpiderMonkey engine. For `v8` version, see [golemfactory/v8-wasm](https://github.com/golemfactory/v8-wasm).
+A WebAssembly sandbox using standalone SpiderMonkey engine. For `v8` version,
+see [golemfactory/v8-wasm](https://github.com/golemfactory/v8-wasm).
 
 This WebAssembly sandbox is used in current development version of
-Golem: [golem#apps#wasm](https://github.com/golemfactory/golem/tree/develop/apps/wasm).
+Golem: [golem/apps/wasm](https://github.com/golemfactory/golem/tree/develop/apps/wasm).
+If you would like to launch a Wasm task in Golem, see
+[here](https://github.com/golemfactory/golem/wiki/Launching-Wasm-tasks-in-Golem).
 
 - [SpiderMonkey-based WebAssembly Sandbox](#spidermonkey-based-webassembly-sandbox)
   - [Quick start guide](#quick-start-guide)
