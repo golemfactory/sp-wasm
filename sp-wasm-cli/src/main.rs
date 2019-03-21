@@ -10,8 +10,8 @@ Standalone SpiderMonkey instance that can be used to run any Emscripten
 generated WASM according to the Golem calling convention.
 
 Usage:
-    sp_wasm -I <input-dir> -O <output-dir> -j <wasm-js> -w <wasm> -o <output-file>... [-- <args>...]
-    sp_wasm (-h | --help)
+    wasm-sandbox -I <input-dir> -O <output-dir> -j <wasm-js> -w <wasm> -o <output-file>... [-- <args>...]
+    wasm-sandbox (-h | --help)
 
 Options:
     -I <input-dir>          Path to the input dir.
