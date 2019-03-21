@@ -18,10 +18,11 @@ If you would like to launch a Wasm task in Golem, see
 
 - [SpiderMonkey-based WebAssembly Sandbox](#spidermonkey-based-webassembly-sandbox)
   - [Quick start guide](#quick-start-guide)
-    - [1. Create simple C program](#1-create-simple-c-program)
+    - [1. Create and cross-compile simple program](#1-create-and-cross-compile-simple-program)
+      - [1.1 C/C++](#11-cc)
+      - [1.2 Rust](#12-rust)
     - [2. Create input and output dirs and files](#2-create-input-and-output-dirs-and-files)
-    - [3. Compile to Wasm using Emscripten](#3-compile-to-wasm-using-emscripten)
-    - [4. Run](#4-run)
+    - [3. Run!](#3-run)
   - [Build instructions](#build-instructions)
   - [CLI arguments explained](#cli-arguments-explained)
   - [Caveats](#caveats)
@@ -33,11 +34,14 @@ If you would like to launch a Wasm task in Golem, see
 This guide assumes you have successfully built the `wasm-sandbox` binary; for build instructions, see section
 [Build instructions](#build-instructions) below.
 
-### 1. Create simple C program
-Let us create a simple `hello world` style C program which will read
-in some text from `in.txt` text file, read your name from the command
-line, and save the resultant text in `out.txt`.
+### 1. Create and cross-compile simple program
+Let us create a simple `hello world` style program which will read in
+some text from `in.txt` text file, read your name from the command line,
+and save the resultant text in `out.txt`. We'll demonstrate how to
+cross-compile apps to Wasm for use in Golem in two languages of choice:
+C and Rust.
 
+#### 1.1 C/C++
 ```c
 #include <stdio.h>
 
@@ -67,36 +71,13 @@ the results of computation by reading and writing to files. Thus, every
 Wasm program is required to at the very least create an output file.
 If your code does not include file manipulation in its main body,
 then the Emscripten compiler, by default, will not initialise
-JavaScript `FS` library, and will trip the sandbox.
+JavaScript `FS` library, and will trip the sandbox. This will also be true
+for programs cross-compiled [from Rust](#12-rust).
 
-### 2. Create input and output dirs and files
-The sandbox will require us to specify input and output paths together
-with output filenames to create, and any additional arguments (see
-[CLI arguments explained](#cli-arguments-explained) section below
-for detailed specification
-of the required arguments). Suppose we have the following file
-structure locally
-
-```
-  |-- simple.c
-  |
-  |-- in/
-  |    |
-  |    |-- in.txt
-  |
-  |-- out/
-```
-
-Paste the following text in the `in.txt` file
-
-```
-// in.txt
-You are running Wasm!
-```
-
-### 3. Compile to Wasm using Emscripten
-For this step, you will need the Emscripten SDK installed on your
-system. For instructions on how to do it, see [here](https://emscripten.org/docs/getting_started/downloads.html).
+Now, we can try and compile the program with Emscripten.
+In order to do that you need Emscripten SDK installed on your
+system. For instructions on how to do it, see
+[here](https://emscripten.org/docs/getting_started/downloads.html).
 
 ```
 $ emcc -o simple.js -s BINARYEN_ASYNC_COMPILATION=0 simple.c
@@ -114,11 +95,108 @@ cross-compiling to Wasm which we currently do not support.
 Therefore, in order to alleviate the problem, make sure to always
 cross-compile with `-s BINARYEN_ASYNC_COMPILATION=0` flag.
 
-### 4. Run
+#### 1.2 Rust
+With Rust, firstly go ahead and create a new binary with `cargo`
+```
+$ cargo new --bin simple
+```
+
+Then go ahead and paste the following to `simple/src/main.rs`
+file
+```rust
+use std::env;
+use std::fs;
+use std::io::{self, Read, Write};
+
+fn main() -> io::Result<()> {
+    let args = env::args().collect::<Vec<String>>();
+    let name = args.get(1).map_or("anonymous".to_owned(), |x| x.clone());
+
+    let mut in_file = fs::File::open("in.txt")?;
+    let mut contents = String::new();
+    in_file.read_to_string(&mut contents)?;
+
+    let mut out_file = fs::File::create("out.txt")?;
+    out_file.write_all(&contents.as_bytes())?;
+    out_file.write_all(&name.as_bytes())?;
+
+    Ok(())
+}
+```
+
+As was the case with [C program](#11-c/c++), it is important to notice
+here that the sandbox communicates
+the results of computation by reading and writing to files. Thus, every
+Wasm program is required to at the very least create an output file.
+If your code does not include file manipulation in its main body,
+then the Emscripten compiler, by default, will not initialise
+JavaScript `FS` library, and will trip the sandbox.
+
+In order to cross-compile Rust to Wasm compatible with Golem's
+sandbox, firstly we need to install the required target which
+is `wasm32-unknown-emscripten`. The easiest way of doing so, as well
+as generally managing your Rust installations, is to use
+[rustup](https://rustup.rs/)
+```
+$ rustup target add wasm32-unknown-emscripten
+```
+
+Note that cross-compiling Rust to this target still requires that you
+have Emscripten SDK installed on your
+system. For instructions on how to do it, see
+[here](https://emscripten.org/docs/getting_started/downloads.html).
+
+Now, we can compile our Rust program to Wasm. Make sure you are in 
+the root of your Rust crate, i.e., at the top of `simple`
+if you didn't change the name of your crate, and run
+```
+$ cargo rustc --target=wasm32-unknown-emscripten --release -- \
+  -C link-args="-s BINARYEN_ASYNC_COMPILATION=0"
+```
+
+If everything went OK, you should now see two files:
+`simple.js` and `simple.wasm` in `simple/target/wasm32-unknown-emscripten/release`.
+Just like in [C program](#11-cc++)'s case, the produced JavaScript
+file acts as glue code and sets up all of
+the rudimentary syscalls in JavaScript such as `MemFS` (in-memory
+filesystem), etc., while the `simple.wasm` is our Rust program
+cross-compiled to Wasm.
+
+Again, note here the compiler flag `-s BINARYEN_ASYNC_COMPILATION=0` passed as
+additional compiler flags to `rustc`. By
+default, when building for target `wasm32-unknown-emscripten` with `rustc`
+the compiler will cross-compile with default Emscripten compiler flags which
+require async IO lib when cross-compiling to Wasm which we currently
+do not support. Therefore, in order to alleviate the problem, make
+sure to always cross-compile with `-s BINARYEN_ASYNC_COMPILATION=0` flag.
+
+### 2. Create input and output dirs and files
+The sandbox will require us to specify input and output paths together
+with output filenames to create, and any additional arguments (see
+[CLI arguments explained](#cli-arguments-explained) section below
+for detailed specification
+of the required arguments). Suppose we have the following file
+structure locally
+
+```
+  |-- in/
+  |    |
+  |    |-- in.txt
+  |
+  |-- out/
+```
+
+Paste the following text in the `in.txt` file
+
+```
+// in.txt
+You are running Wasm!
+```
+
+### 3. Run!
 After you have successfully run all of the above steps up to now, you should have the following file structure locally
 
 ```
-  |-- simple.c
   |-- simple.js
   |-- simple.wasm
   |
@@ -148,7 +226,6 @@ After you execute Wasm bin in the sandbox, `out.txt` should be
 created in `out/` dir
 
 ```
-  |-- simple.c
   |-- simple.js
   |-- simple.wasm
   |
