@@ -2,15 +2,21 @@ pub mod engine;
 pub mod vfs;
 
 use self::engine::*;
+use self::vfs::*;
 
 use itertools::Itertools;
 use std::error::Error;
 
 use lazy_static::lazy_static;
+use std::path;
 use std::sync::Mutex;
 
+static REPO_PATH: &str = "mem://sp_wasm";
+static REPO_PASS: &str = "wasm@golem";
+
 lazy_static! {
-    static ref VFS: Mutex<vfs::VirtualFS> = Mutex::new(vfs::VirtualFS::new());
+    static ref VFS: Mutex<VirtualFS> =
+        Mutex::new(VirtualFS::new(REPO_PATH, REPO_PASS).expect("couldn't create VirtualFS"));
 }
 
 pub struct Sandbox {
@@ -54,22 +60,17 @@ impl Sandbox {
 
         VFS.lock()
             .unwrap()
-            .map_path(input_path.as_ref(), &mut |rel_path, node| {
-                let path: String = rel_path.to_string_lossy().into();
-                match node {
-                    vfs::FSNode::File(_) => {
-                        // create file
-                        js += &format!(
-                            "\n\tFS.writeFile('{}', new Uint8Array(readFile('{}')));",
-                            path, path
-                        );
-                    }
-                    vfs::FSNode::Dir => {
-                        // create dir
-                        if path != "/" {
-                            js += &format!("FS.mkdir('{}');", path);
-                        }
-                    }
+            .map_path(input_path.as_ref(), "/", &mut |abs_path, rel_path| {
+                let rel_path_s: String = rel_path.to_string_lossy().into();
+                if abs_path.is_dir() {
+                    // create dir
+                    js += &format!("FS.mkdir('{}');", rel_path_s);
+                } else {
+                    // create file
+                    js += &format!(
+                        "\n\tFS.writeFile('{}', new Uint8Array(readFile('{}')));",
+                        rel_path_s, rel_path_s
+                    );
                 }
             })?;
 
@@ -109,19 +110,25 @@ impl Sandbox {
         It::Item: AsRef<str>,
     {
         for output_file in output_files {
-            let mut output_path = std::path::PathBuf::from(output_path.as_ref());
-            output_path.push(vfs::sanitize_path(output_file.as_ref())?);
-
-            log::info!(
-                "Saving output at {}",
-                output_path.as_path().to_string_lossy()
-            );
+            let mut output_rel_path = path::PathBuf::from("/");
+            output_rel_path.push(output_file.as_ref());
+            let output_rel_path_str: String = output_rel_path.as_path().to_string_lossy().into();
 
             self.engine.evaluate_script(&format!(
                 "writeFile('{}', FS.readFile('{}'));",
-                output_path.as_path().to_string_lossy(),
-                output_file.as_ref()
+                output_rel_path_str, output_rel_path_str,
             ))?;
+
+            let mut output_abs_path = path::PathBuf::from(output_path.as_ref());
+            output_abs_path.push(output_file.as_ref());
+
+            log::info!(
+                "Saving output at {}",
+                output_abs_path.as_path().to_string_lossy()
+            );
+
+            let contents = VFS.lock().unwrap().read_file(output_rel_path)?;
+            vfs::write_file(output_abs_path, &contents)?;
         }
 
         Ok(())

@@ -1,4 +1,3 @@
-use super::vfs;
 use super::VFS;
 
 use mozjs::glue::SetBuildId;
@@ -174,8 +173,7 @@ impl Engine {
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
         if let Err(err) = (|| -> Result<(), Box<dyn std::error::Error>> {
-            let vfs = VFS.lock().unwrap();
-            let contents = vfs.get_file_contents(filename)?;
+            let contents = VFS.lock().unwrap().read_file(filename)?;
 
             rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
             ArrayBuffer::create(ctx, CreateWith::Slice(&contents), rval.handle_mut())
@@ -216,7 +214,9 @@ impl Engine {
             let contents: Vec<u8> = contents
                 .map_err(|_| error::Uint8ArrayToVecConversionError)?
                 .to_vec();
-            vfs::write_file(filename, &contents)?;
+
+            VFS.lock().unwrap().write_file(filename, &contents)?;
+
             Ok(())
         })() {
             JS_ReportErrorASCII(
