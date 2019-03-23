@@ -1,65 +1,81 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::error::Error as StdError;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path;
 
 use path_clean::PathClean;
-
-pub enum FSNode {
-    File(Vec<u8>),
-    Dir,
-}
+use zbox::Repo;
 
 pub struct VirtualFS {
-    pub mapping: BTreeMap<String, FSNode>,
+    repo: Repo,
 }
 
 impl VirtualFS {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(path_to_repo: &str, password: &str) -> Result<Self, Box<dyn StdError>> {
+        zbox::init_env();
+        let repo = zbox::RepoOpener::new()
+            .create(true)
+            .open(path_to_repo, password)?;
+        Ok(Self { repo })
     }
 
-    pub fn map_file<P>(&mut self, abs_path: P, rel_path: P) -> io::Result<&FSNode>
+    pub fn read_file<P>(&mut self, path: P) -> Result<Vec<u8>, Box<dyn StdError>>
     where
         P: AsRef<path::Path>,
     {
-        let contents = read_file(&abs_path)?;
-        let rel_path: String = rel_path.as_ref().to_string_lossy().into();
-        self.mapping
-            .insert(rel_path.clone(), FSNode::File(contents));
-        Ok(&self.mapping[&rel_path])
+        let mut file = self.repo.open_file(path.as_ref())?;
+        let mut contents = Vec::new();
+        file.read_to_end(&mut contents)?;
+        Ok(contents)
     }
 
-    pub fn map_dir<P>(&mut self, path: P) -> io::Result<&FSNode>
+    pub fn write_file<P>(&mut self, path: P, contents: &[u8]) -> Result<(), zbox::Error>
     where
         P: AsRef<path::Path>,
     {
-        let path: String = path.as_ref().to_string_lossy().into();
-        self.mapping.insert(path.clone(), FSNode::Dir);
-        Ok(&self.mapping[&path])
+        let mut file = self.repo.create_file(path.as_ref())?;
+        file.write_once(contents)
+    }
+
+    pub fn map_file<P>(&mut self, abs_path: P, rel_path: P) -> Result<(), Box<dyn StdError>>
+    where
+        P: AsRef<path::Path>,
+    {
+        let contents = read_file(abs_path.as_ref())?;
+        self.write_file(rel_path.as_ref(), &contents)?;
+        Ok(())
     }
 
     pub fn map_path<P>(
         &mut self,
         path: P,
-        cb: &mut FnMut(&path::Path, &FSNode),
+        relative_root: P,
+        cb: &mut FnMut(&path::Path, &path::Path),
     ) -> Result<(), Box<dyn StdError>>
     where
         P: AsRef<path::Path>,
     {
-        let rel_path = path::PathBuf::from("/");
-        let abs_path = path::PathBuf::from(path.as_ref());
-
+        let rel_path = relative_root.as_ref().to_owned();
+        let abs_path = path.as_ref().to_owned();
         let mut fifo = VecDeque::new();
-        fifo.push_back((abs_path, rel_path));
 
-        while let Some(path) = fifo.pop_front() {
-            let (abs_path, rel_path) = path;
+        for entry in fs::read_dir(abs_path)? {
+            let entry = entry?;
+            let abs_path = entry.path();
+
+            let mut rel_path = rel_path.clone();
+            rel_path.push(abs_path.file_name().ok_or(error::RelativePathError)?);
+
+            fifo.push_back((abs_path, rel_path));
+        }
+
+        while let Some((abs_path, rel_path)) = fifo.pop_front() {
             log::debug!("abs_path = {:?}, rel_path = {:?}", abs_path, rel_path);
+            cb(&abs_path, &rel_path);
 
             if abs_path.is_dir() {
-                cb(&rel_path, self.map_dir(&rel_path)?);
+                self.repo.create_dir(rel_path.as_path())?;
                 log::debug!("mapped dir = {:?}", rel_path);
 
                 for entry in fs::read_dir(abs_path)? {
@@ -72,33 +88,11 @@ impl VirtualFS {
                     fifo.push_back((abs_path, rel_path));
                 }
             } else {
-                cb(&rel_path, self.map_file(&abs_path, &rel_path)?);
+                self.map_file(abs_path.as_path(), rel_path.as_path())?;
                 log::debug!("mapped file {:?} => {:?}", abs_path, rel_path);
             }
         }
         Ok(())
-    }
-
-    pub fn get_file_contents<S>(&self, path: S) -> Result<&[u8], error::FileNotMappedError>
-    where
-        S: Into<String>,
-    {
-        let path = path.into();
-        self.mapping
-            .get(&path)
-            .and_then(|node| match node {
-                FSNode::File(ref contents) => Some(contents.as_slice()),
-                FSNode::Dir => None,
-            })
-            .ok_or_else(|| error::FileNotMappedError(path))
-    }
-}
-
-impl Default for VirtualFS {
-    fn default() -> Self {
-        Self {
-            mapping: BTreeMap::new(),
-        }
     }
 }
 
@@ -118,16 +112,6 @@ where
 {
     let mut file = fs::File::create(path.as_ref())?;
     file.write_all(contents)
-}
-
-pub fn sanitize_path<P>(path: P) -> Result<path::PathBuf, path::StripPrefixError>
-where
-    P: AsRef<path::Path>,
-{
-    let mut sanitized = path::PathBuf::from("/");
-    sanitized.push(path.as_ref());
-    let sanitized = sanitized.clean();
-    sanitized.strip_prefix("/").map(path::PathBuf::from)
 }
 
 pub mod error {
@@ -155,6 +139,16 @@ pub mod error {
             write!(f, "file {} was not mapped", self.0)
         }
     }
+}
+
+pub fn sanitize_path<P>(path: P) -> Result<path::PathBuf, path::StripPrefixError>
+where
+    P: AsRef<path::Path>,
+{
+    let mut sanitized = path::PathBuf::from("/");
+    sanitized.push(path.as_ref());
+    let sanitized = sanitized.clean();
+    sanitized.strip_prefix("/").map(path::PathBuf::from)
 }
 
 #[cfg(test)]
