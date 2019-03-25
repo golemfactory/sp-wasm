@@ -1,7 +1,8 @@
 [workspace]
 members = [
     'sp-wasm-cli',
-    'sp-wasm-lib',
+    'sp-wasm-engine',
+    'sp-wasm-memfs',
     'sp-wasm-tests'
 ]
 

@@ -1,4 +1,4 @@
-use sp_wasm_lib::prelude::*;
+use sp_wasm_engine::prelude::*;
 
 fn main() {
     let start = Engine::new()
