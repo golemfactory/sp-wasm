@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 sp-wasm-lib = { path = "../sp-wasm-lib" }
+zbox = "0.6"
 
 [[bin]]
 name = "sp_wasm_tests"

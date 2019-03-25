@@ -313,10 +313,10 @@ pub mod error {
 
     #[derive(Debug)]
     pub struct JSError {
-        message: String,
-        filename: String,
-        lineno: libc::c_uint,
-        column: libc::c_uint,
+        pub message: String,
+        pub filename: String,
+        pub lineno: libc::c_uint,
+        pub column: libc::c_uint,
     }
 
     impl JSError {

@@ -8,5 +8,6 @@ pub mod sandbox;
 
 pub mod prelude {
     pub use crate::sandbox::engine::Engine;
+    pub use crate::sandbox::vfs::VirtualFS;
     pub use crate::sandbox::Sandbox;
 }
