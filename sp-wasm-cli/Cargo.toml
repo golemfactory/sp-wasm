@@ -1,18 +1,18 @@
 [package]
 name = "sp-wasm-cli"
-version = "0.0.2"
+version = "0.1.1"
 authors = ["Jakub Konka <jakub.konka@golem.network>"]
 edition = "2018"
 
 [dependencies]
-sp-wasm-lib = { path = "../sp-wasm-lib" }
+sp-wasm-engine = { path = "../sp-wasm-engine" }
 serde = { version = "1", features = ["derive"] }
 docopt = "1"
 env_logger = "0.6"
 log = "0.4"
 
 [features]
-debugmozjs = ["sp-wasm-lib/debugmozjs"]
+debugmozjs = ["sp-wasm-engine/debugmozjs"]
 
 [[bin]]
 name = "wasm-sandbox"

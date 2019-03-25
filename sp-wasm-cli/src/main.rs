@@ -1,6 +1,6 @@
 #![warn(clippy::all)]
 
-use sp_wasm_lib::prelude::*;
+use sp_wasm_engine::prelude::*;
 
 use docopt::Docopt;
 use serde::Deserialize;

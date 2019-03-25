@@ -250,8 +250,7 @@ You are running Wasm!
 The implementation depends on [servo/rust-mozjs](https://github.com/servo/rust-mozjs) which in turn depends on
 [servo/mozjs](https://github.com/servo/mozjs). The latter is Mozilla's Servo's SpiderMonkey fork and low-level
 Rust bindings, and as such, requires C/C++ compiler and Autoconf 2.13. See [servo/mozjs/README.md](https://github.com/servo/mozjs)
-for detailed building instructions. Furthermore, for virtual filesystem, the sandbox uses [zboxfs](https://github.com/zboxfs/zbox)
-which internally relies on `libsodium >= 1.0.11`.
+for detailed building instructions.
 
 After following the aforementioned instructions, to build the sandbox, run
 

@@ -1,4 +1,6 @@
-use sp_wasm_lib::prelude::*;
+use sp_wasm_engine::error::Error;
+use sp_wasm_engine::prelude::*;
+use sp_wasm_engine::sandbox::engine::error::Error as EngineError;
 
 use std::path;
 
@@ -9,10 +11,14 @@ fn main() {
     assert!(result.is_err());
     assert!(!path::Path::new("/tmp/test.txt").is_file());
 
-    if let Err(err) = result {
-        assert_eq!(
-            &err.message,
-            "failed to write file with error: File not found"
-        );
+    match result {
+        Err(Error::Engine(ref err)) => match err {
+            EngineError::SMJS(ref err) => assert_eq!(
+                err.message,
+                "failed to write file with error: File not found"
+            ),
+            _ => panic!("wrong error received"),
+        },
+        _ => panic!("wrong error received"),
     }
 }

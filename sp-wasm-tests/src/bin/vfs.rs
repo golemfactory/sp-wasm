@@ -1,10 +1,10 @@
-use sp_wasm_lib::prelude::*;
-use sp_wasm_tests::{create_tmp, destroy_tmp, unwrap_res, _assert_eq};
+use sp_wasm_engine::prelude::*;
+use sp_wasm_tests::{_assert_eq, create_tmp, destroy_tmp, unwrap_res};
 
-use std::io::Write;
-use std::path;
 use std::error;
 use std::fs;
+use std::io::Write;
+use std::path;
 
 fn run<P>(test_dir: P) -> Result<(), Box<dyn error::Error>>
 where
@@ -24,7 +24,7 @@ where
     f.write_all(b"bbb")?;
 
     // map into VFS
-    let mut vfs = VirtualFS::new("mem://sp_wasm_tests", "1234test")?;
+    let mut vfs = VirtualFS::new();
     vfs.map_path(test_dir.as_ref(), "/", &mut |_, _| {})?;
 
     let contents = vfs.read_file("/a.txt")?;
@@ -41,7 +41,7 @@ where
 
     // try & create file in subdir that doesn't exist
     let res = vfs.write_file("/sub/sub2/d.txt", b"ddd");
-    _assert_eq(res, Err(zbox::Error::NotFound))?;
+    _assert_eq(res.is_err(), true)?;
 
     Ok(())
 }

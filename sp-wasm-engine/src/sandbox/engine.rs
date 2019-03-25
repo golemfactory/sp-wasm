@@ -1,4 +1,5 @@
 use super::VFS;
+use crate::Result;
 
 use mozjs::glue::SetBuildId;
 use mozjs::jsapi::BuildIdCharVector;
@@ -29,9 +30,9 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new() -> Result<Self> {
         log::info!("Initializing SpiderMonkey engine");
-        let engine = JSEngine::init().map_err(error::JSEngineError)?;
+        let engine = JSEngine::init().map_err(error::Error::SMInternal)?;
         let runtime = Runtime::new(engine);
 
         unsafe {
@@ -40,7 +41,7 @@ impl Engine {
         }
     }
 
-    unsafe fn create_with(runtime: Runtime) -> Result<Self, error::JSError> {
+    unsafe fn create_with(runtime: Runtime) -> Result<Self> {
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
         let c_option = CompartmentOptions::default();
         let ctx = runtime.cx();
@@ -119,11 +120,7 @@ impl Engine {
         Ok(Self { runtime, global })
     }
 
-    unsafe fn eval<S>(
-        runtime: &Runtime,
-        global: *mut JSObject,
-        script: S,
-    ) -> Result<Value, error::JSError>
+    unsafe fn eval<S>(runtime: &Runtime, global: *mut JSObject, script: S) -> Result<Value>
     where
         S: AsRef<str>,
     {
@@ -139,13 +136,13 @@ impl Engine {
             .evaluate_script(global, script.as_ref(), "noname", 0, rval.handle_mut())
             .is_err()
         {
-            return Err(error::JSError::new(ctx));
+            return Err(error::Error::SMJS(error::JSError::new(ctx)).into());
         }
 
         Ok(rval.get())
     }
 
-    pub fn evaluate_script<S>(&self, script: S) -> Result<Value, error::JSError>
+    pub fn evaluate_script<S>(&self, script: S) -> Result<Value>
     where
         S: AsRef<str>,
     {
@@ -172,12 +169,12 @@ impl Engine {
         let arg = Handle::from_raw(args.get(0));
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
-        if let Err(err) = (|| -> Result<(), Box<dyn std::error::Error>> {
+        if let Err(err) = (|| -> Result<()> {
             let contents = VFS.lock().unwrap().read_file(filename)?;
 
             rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
             ArrayBuffer::create(ctx, CreateWith::Slice(&contents), rval.handle_mut())
-                .map_err(|_| error::SliceToUint8ArrayConversionError)?;
+                .map_err(|_| error::Error::SliceToUint8ArrayConversion)?;
 
             args.rval().set(ObjectValue(rval.get()));
             Ok(())
@@ -209,10 +206,10 @@ impl Engine {
         let arg = Handle::from_raw(args.get(0));
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
-        if let Err(err) = (|| -> Result<(), Box<dyn std::error::Error>> {
+        if let Err(err) = (|| -> Result<()> {
             typedarray!(in(ctx) let contents: ArrayBufferView = args.get(1).to_object());
             let contents: Vec<u8> = contents
-                .map_err(|_| error::Uint8ArrayToVecConversionError)?
+                .map_err(|_| error::Error::Uint8ArrayToVecConversion)?
                 .to_vec();
 
             VFS.lock().unwrap().write_file(filename, &contents)?;
@@ -273,45 +270,59 @@ pub mod error {
     use mozjs::jsapi::JS_IsExceptionPending;
     use mozjs::rust::wrappers::{JS_ErrorFromException, JS_GetPendingException};
     use mozjs::rust::HandleObject;
+    use mozjs::rust::JSEngineError;
 
-    use std::error::Error;
+    use std::error::Error as StdError;
     use std::fmt;
     use std::slice;
 
     #[derive(Debug)]
-    pub struct SliceToUint8ArrayConversionError;
+    pub enum Error {
+        SliceToUint8ArrayConversion,
+        Uint8ArrayToVecConversion,
+        SMInternal(JSEngineError),
+        SMJS(JSError),
+    }
 
-    impl Error for SliceToUint8ArrayConversionError {}
-
-    impl fmt::Display for SliceToUint8ArrayConversionError {
+    impl fmt::Display for Error {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "couldn't convert &[u8] to Uint8Array")
+            match *self {
+                Error::SliceToUint8ArrayConversion => {
+                    write!(f, "couldn't convert &[u8] to Uint8Array")
+                }
+                Error::Uint8ArrayToVecConversion => {
+                    write!(f, "couldn't convert Uint8Array to Vec<u8>")
+                }
+                Error::SMInternal(ref err) => write!(f, "internal SpiderMonkey error: {:?}", err),
+                Error::SMJS(ref err) => err.fmt(f),
+            }
         }
     }
 
-    #[derive(Debug)]
-    pub struct Uint8ArrayToVecConversionError;
+    impl StdError for Error {}
 
-    impl Error for Uint8ArrayToVecConversionError {}
-
-    impl fmt::Display for Uint8ArrayToVecConversionError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "couldn't convert Uint8Array to Vec<u8>")
+    impl PartialEq for Error {
+        fn eq(&self, other: &Error) -> bool {
+            match (self, other) {
+                (&Error::SliceToUint8ArrayConversion, &Error::SliceToUint8ArrayConversion) => true,
+                (&Error::Uint8ArrayToVecConversion, &Error::Uint8ArrayToVecConversion) => true,
+                (&Error::SMInternal(ref left), &Error::SMInternal(ref right)) => {
+                    match (left, right) {
+                        (JSEngineError::AlreadyInitialized, JSEngineError::AlreadyInitialized) => {
+                            true
+                        }
+                        (JSEngineError::AlreadyShutDown, JSEngineError::AlreadyShutDown) => true,
+                        (JSEngineError::InitFailed, JSEngineError::InitFailed) => true,
+                        (_, _) => false,
+                    }
+                }
+                (&Error::SMJS(ref left), &Error::SMJS(ref right)) => left == right,
+                (_, _) => false,
+            }
         }
     }
 
-    #[derive(Debug)]
-    pub struct JSEngineError(pub mozjs::rust::JSEngineError);
-
-    impl Error for JSEngineError {}
-
-    impl fmt::Display for JSEngineError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "error initializing JSEngine: {:?}", self.0)
-        }
-    }
-
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq)]
     pub struct JSError {
         pub message: String,
         pub filename: String,
@@ -320,8 +331,8 @@ pub mod error {
     }
 
     impl JSError {
-        pub fn new(ctx: *mut JSContext) -> Self {
-            unsafe { Self::create_with(ctx) }
+        pub unsafe fn new(ctx: *mut JSContext) -> Self {
+            Self::create_with(ctx)
         }
 
         unsafe fn create_with(ctx: *mut JSContext) -> Self {
@@ -410,8 +421,6 @@ pub mod error {
         }
     }
 
-    impl Error for JSError {}
-
     impl fmt::Display for JSError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(
@@ -421,4 +430,5 @@ pub mod error {
             )
         }
     }
+
 }
