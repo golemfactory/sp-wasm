@@ -1,7 +1,7 @@
 FROM rust:1.33
 
 RUN echo "deb http://deb.debian.org/debian stretch-backports main" >> /etc/apt/sources.list
-RUN apt -y update && apt -y install autoconf2.13 clang-6.0 --no-install-recommends && rm -rf /var/lib/apt/lists/*
+RUN apt -y update && apt -y install autoconf2.13 clang-6.0 libsodium-dev --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /sp-wasm
 COPY . .
