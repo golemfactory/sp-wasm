@@ -110,8 +110,9 @@ impl Sandbox {
         It::Item: AsRef<str>,
     {
         for output_file in output_files {
+            let output_file = vfs::sanitize_path(output_file.as_ref())?;
             let mut output_rel_path = path::PathBuf::from("/");
-            output_rel_path.push(output_file.as_ref());
+            output_rel_path.push(output_file.as_path());
             let output_rel_path_str: String = output_rel_path.as_path().to_string_lossy().into();
 
             self.engine.evaluate_script(&format!(
@@ -120,7 +121,7 @@ impl Sandbox {
             ))?;
 
             let mut output_abs_path = path::PathBuf::from(output_path.as_ref());
-            output_abs_path.push(output_file.as_ref());
+            output_abs_path.push(output_file);
 
             log::info!(
                 "Saving output at {}",

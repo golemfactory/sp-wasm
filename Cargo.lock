@@ -629,6 +629,7 @@ name = "sp-wasm-tests"
 version = "0.1.0"
 dependencies = [
  "sp-wasm-lib 0.1.0",
+ "zbox 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

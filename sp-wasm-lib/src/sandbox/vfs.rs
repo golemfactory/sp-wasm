@@ -47,14 +47,15 @@ impl VirtualFS {
         Ok(())
     }
 
-    pub fn map_path<P>(
+    pub fn map_path<P1, P2>(
         &mut self,
-        path: P,
-        relative_root: P,
+        path: P1,
+        relative_root: P2,
         cb: &mut FnMut(&path::Path, &path::Path),
     ) -> Result<(), Box<dyn StdError>>
     where
-        P: AsRef<path::Path>,
+        P1: AsRef<path::Path>,
+        P2: AsRef<path::Path>,
     {
         let rel_path = relative_root.as_ref().to_owned();
         let abs_path = path.as_ref().to_owned();
