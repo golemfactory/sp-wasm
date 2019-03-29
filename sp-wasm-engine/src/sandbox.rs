@@ -102,18 +102,33 @@ impl Sandbox {
         It::Item: AsRef<str>,
     {
         for output_file in output_files {
+            // sanitize output file path (may contain subdirs)
             let output_file = hostfs::sanitize_path(output_file.as_ref())?;
+
+            // create subdirs if they don't exist
             let mut output_vfs_path = path::PathBuf::from("/");
             output_vfs_path.push(output_file.as_path());
-            let output_vfs_path_str: String = output_vfs_path.as_path().to_string_lossy().into();
 
+            if let Some(p) = output_vfs_path.parent() {
+                VFS.lock().unwrap().create_dir_all(p)?;
+            }
+
+            // copy files from JS_FS to MemFS
+            let output_vfs_path_str: String = output_vfs_path.as_path().to_string_lossy().into();
             self.engine.evaluate_script(&format!(
                 "writeFile('{}', FS.readFile('{}'));",
                 output_vfs_path_str, output_vfs_path_str,
             ))?;
 
+            // create files on the host
             let mut output_hostfs_path = path::PathBuf::from(output_path.as_ref());
-            output_hostfs_path.push(output_file);
+
+            if let Some(p) = output_file.parent() {
+                log::debug!("Creating subdirs={:?}", output_hostfs_path.join(p));
+                hostfs::create_dir_all(output_hostfs_path.join(p))?;
+            }
+
+            output_hostfs_path.push(output_file.as_path());
 
             log::info!(
                 "Saving output at {}",
