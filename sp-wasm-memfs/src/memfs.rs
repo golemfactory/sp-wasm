@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use path_clean::PathClean;
+use tool::prelude::*;
 
 use super::error::*;
 use super::file::*;
@@ -85,6 +86,38 @@ impl MemFS {
             .insert(filename.clone(), new_dir_node(filename));
 
         Ok(())
+    }
+
+    pub fn create_dir_all<P>(&self, path: P) -> Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        let walk_create = fix(|f, path: PathBuf| -> Result<Arc<Mutex<Node>>> {
+            let (parent, filename) = Self::resolve_parent(path)?;
+
+            let node = if self.is_dir(parent.as_path())? {
+                self.walk(parent, Arc::clone(&self.root))?
+            } else {
+                f(parent)?
+            };
+
+            let new_child = new_dir_node(filename.clone());
+            node.lock()
+                .unwrap()
+                .children
+                .insert(filename.clone(), Arc::clone(&new_child));
+
+            Ok(new_child)
+        });
+
+        if let Err(err) = walk_create(path.as_ref().to_owned()) {
+            match err {
+                Error::IsRoot => Ok(()),
+                _ => Err(err),
+            }
+        } else {
+            Ok(())
+        }
     }
 
     pub fn create_file<P>(&self, path: P) -> Result<File>
@@ -202,6 +235,21 @@ mod test {
         assert_eq!(fs.create_dir("/tmp/c/d").unwrap_err(), Error::NotFound);
         assert_eq!(fs.create_dir("/").unwrap_err(), Error::IsRoot);
         assert_eq!(fs.create_dir("tmp/a/c").unwrap_err(), Error::InvalidPath);
+
+        Ok(())
+    }
+
+    #[test]
+    fn create_dir_all() -> Result<()> {
+        let fs = MemFS::new();
+        fs.create_dir_all("/tmp/a/b/c")?;
+
+        assert!(fs.is_dir("/tmp")?);
+        assert!(fs.is_dir("/tmp/a")?);
+        assert!(fs.is_dir("/tmp/a/b")?);
+        assert!(fs.is_dir("/tmp/a/b/c")?);
+
+        assert!(fs.create_dir_all("/").is_ok());
 
         Ok(())
     }

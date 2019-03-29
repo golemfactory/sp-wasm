@@ -32,8 +32,19 @@ impl VirtualFS {
     where
         P: AsRef<path::Path>,
     {
+        log::debug!("Writing file={:?}", path.as_ref());
         let mut file = self.backend.create_file(path.as_ref())?;
         file.write_all(contents)?;
+
+        Ok(())
+    }
+
+    pub fn create_dir_all<P>(&mut self, path: P) -> Result<()>
+    where
+        P: AsRef<path::Path>,
+    {
+        log::debug!("Creating subdirs={:?}", path.as_ref());
+        self.backend.create_dir_all(path)?;
 
         Ok(())
     }
@@ -137,6 +148,15 @@ pub mod hostfs {
     {
         let mut file = fs::File::create(path.as_ref())?;
         file.write_all(contents)?;
+
+        Ok(())
+    }
+
+    pub fn create_dir_all<P>(path: P) -> Result<()>
+    where
+        P: AsRef<path::Path>,
+    {
+        fs::create_dir_all(path)?;
 
         Ok(())
     }

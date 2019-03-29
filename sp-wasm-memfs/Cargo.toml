@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 path-clean = "0.1"
+tool = "0.2"
