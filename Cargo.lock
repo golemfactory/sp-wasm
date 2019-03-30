@@ -373,18 +373,18 @@ dependencies = [
 
 [[package]]
 name = "sp-wasm-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "docopt 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.89 (registry+https://github.com/rust-lang/crates.io-index)",
- "sp-wasm-engine 0.2.0",
+ "sp-wasm-engine 0.2.1",
 ]
 
 [[package]]
 name = "sp-wasm-engine"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "itertools 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -392,12 +392,12 @@ dependencies = [
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "mozjs 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "path-clean 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "sp-wasm-memfs 0.1.0",
+ "sp-wasm-memfs 0.1.1",
 ]
 
 [[package]]
 name = "sp-wasm-memfs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "path-clean 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tool 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -405,10 +405,10 @@ dependencies = [
 
 [[package]]
 name = "sp-wasm-tests"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
- "sp-wasm-engine 0.2.0",
- "sp-wasm-memfs 0.1.0",
+ "sp-wasm-engine 0.2.1",
+ "sp-wasm-memfs 0.1.1",
 ]
 
 [[package]]
