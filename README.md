@@ -14,7 +14,7 @@ see [golemfactory/v8-wasm](https://github.com/golemfactory/v8-wasm).
 This WebAssembly sandbox is used in current development version of
 Golem: [golem/apps/wasm](https://github.com/golemfactory/golem/tree/develop/apps/wasm).
 If you would like to launch a Wasm task in Golem, see
-[here](https://github.com/golemfactory/golem/wiki/Launching-Wasm-tasks-in-Golem).
+[here](https://docs.golem.network/#/About/Use-Cases?id=wasm).
 
 - [SpiderMonkey-based WebAssembly Sandbox](#spidermonkey-based-webassembly-sandbox)
   - [Quick start guide](#quick-start-guide)
