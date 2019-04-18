@@ -24,6 +24,9 @@ If you would like to launch a Wasm task in Golem, see
     - [2. Create input and output dirs and files](#2-create-input-and-output-dirs-and-files)
     - [3. Run!](#3-run)
   - [Build instructions](#build-instructions)
+    - [Using Docker (recommended)](#using-docker-recommended)
+    - [Natively on Linux](#natively-on-linux)
+    - [Natively on other OSes](#natively-on-other-oses)
   - [CLI arguments explained](#cli-arguments-explained)
   - [Caveats](#caveats)
   - [Wasm store](#wasm-store)
@@ -32,7 +35,8 @@ If you would like to launch a Wasm task in Golem, see
 
 ## Quick start guide
 This guide assumes you have successfully built the `wasm-sandbox` binary; for build instructions, see section
-[Build instructions](#build-instructions) below.
+[Build instructions](#build-instructions) below. If you are running Linux, then you can also use the prebuilt
+binaries from [here](https://github.com/golemfactory/sp-wasm/releases).
 
 ### 1. Create and cross-compile simple program
 Let us create a simple `hello world` style program which will read in
@@ -209,9 +213,21 @@ After you have successfully run all of the above steps up to now, you should hav
 
 We can now run our Wasm binary inside the sandbox
 
+1. using Docker (if you've followed [Using Docker (recommended)](#using-docker-recommended)
+   build instructions)
+
 ```
-wasm-sandbox -I in/ -O out/ -j simple.js -w simple.wasm \
-             -o out.txt -- "<your_name>"
+docker run --mount type=bind,source=$PWD,target=/workdir --workdir /workdir \
+            wasm-sandbox:latest -I in/ -O out/ -j simple.js -w simple.wasm \
+            -o out.txt -- "<your_name>"
+```
+
+2. natively (if you're using the prebuilt binaries, or you've built natively following
+   [Natively on Linux](#natively-on-linux) build instructions)
+
+```
+$ wasm-sandbox -I in/ -O out/ -j simple.js -w simple.wasm \
+               -o out.txt -- "<your_name>"
 ```
 
 Here, `-I` maps the input dir with *all* its contents (files and
@@ -247,7 +263,23 @@ You are running Wasm!
 ```
 
 ## Build instructions
-The implementation depends on [servo/rust-mozjs](https://github.com/servo/rust-mozjs) which in turn depends on
+### Using Docker (recommended)
+To build using Docker, simply run
+
+```
+$ ./build.sh
+```
+
+If you are running Windows, then you can invoke the command in the shell script manually
+in the command line as follows
+
+```
+docker build -t wasm-sandbox:latest .
+```
+
+### Natively on Linux
+To build natively on Linux, you need to follow the installation instructions of
+[servo/rust-mozjs](https://github.com/servo/rust-mozjs) and
 [servo/mozjs](https://github.com/servo/mozjs). The latter is Mozilla's Servo's SpiderMonkey fork and low-level
 Rust bindings, and as such, requires C/C++ compiler and Autoconf 2.13. See [servo/mozjs/README.md](https://github.com/servo/mozjs)
 for detailed building instructions.
@@ -263,6 +295,9 @@ If you would like to build with SpiderMonkey's debug symbols and extensive loggi
 ```
 $ cargo build --features "debugmozjs"
 ```
+
+### Natively on other OSes
+We currently do not offer any support for building the sandbox natively on other OSes.
 
 ## CLI arguments explained
 ```
