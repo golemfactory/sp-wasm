@@ -24,8 +24,9 @@ before_script:
 script:
   - cargo +stable fmt --all -- --check
   - travis_wait 30 cargo build --release
+  - travis_wait 30 cargo build
   - travis_wait 30 cargo test --all
-  - "./target/debug/sp_wasm_tests"
+  - cargo run --bin sp_wasm_tests
 before_deploy: |
   TARGET_DIR=releases/sp-wasm-${TRAVIS_OS_NAME}-${TRAVIS_TAG}
   mkdir -p "$TARGET_DIR"
