@@ -17,7 +17,7 @@ addons:
     - autoconf2.13
 script:
 - travis_wait 30 cargo build --release
-- cargo test
+- travis_wait 30 cargo test --all
 - "./target/debug/sp_wasm_tests"
 before_deploy: |
   TARGET_DIR=releases/sp-wasm-${TRAVIS_OS_NAME}-${TRAVIS_TAG}
