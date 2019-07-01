@@ -7,7 +7,9 @@ matrix:
     dist: xenial
 compiler: clang
 fast_finish: true
-cache: cargo
+cache:
+  directories:
+    - $HOME/.cargo
 before_cache:
   - rm -rf /home/travis/.cargo/registry
 sudo: true
