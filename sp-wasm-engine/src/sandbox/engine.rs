@@ -170,7 +170,7 @@ impl Engine {
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
         if let Err(err) = (|| -> Result<()> {
-            let contents = VFS.lock().unwrap().read_file(filename)?;
+            let contents = VFS.lock().unwrap().read_file(&filename)?;
 
             rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
             ArrayBuffer::create(ctx, CreateWith::Slice(&contents), rval.handle_mut())
@@ -181,7 +181,7 @@ impl Engine {
         })() {
             JS_ReportErrorASCII(
                 ctx,
-                format!("failed to read file with error: {}\0", err)
+                format!("failed to read file '{}' with error: {}\0", &filename, err)
                     .as_bytes()
                     .as_ptr() as *const libc::c_char,
             );
@@ -212,13 +212,13 @@ impl Engine {
                 .map_err(|_| error::Error::Uint8ArrayToVecConversion)?
                 .to_vec();
 
-            VFS.lock().unwrap().write_file(filename, &contents)?;
+            VFS.lock().unwrap().write_file(&filename, &contents)?;
 
             Ok(())
         })() {
             JS_ReportErrorASCII(
                 ctx,
-                format!("failed to write file with error: {}\0", err)
+                format!("failed to write file '{}' with error: {}\0", &filename, err)
                     .as_bytes()
                     .as_ptr() as *const libc::c_char,
             );
@@ -268,8 +268,10 @@ pub mod error {
 
     use mozjs::jsapi::JS_ClearPendingException;
     use mozjs::jsapi::JS_IsExceptionPending;
+    use mozjs::rust::jsapi_wrapped::JS_Stringify;
     use mozjs::rust::wrappers::{JS_ErrorFromException, JS_GetPendingException};
     use mozjs::rust::HandleObject;
+    use mozjs::rust::HandleValue;
     use mozjs::rust::JSEngineError;
 
     use std::error::Error as StdError;
@@ -325,12 +327,11 @@ pub mod error {
     #[derive(Debug, PartialEq)]
     pub struct JSError {
         pub message: String,
-        pub filename: String,
-        pub lineno: libc::c_uint,
-        pub column: libc::c_uint,
     }
 
     impl JSError {
+        const MAX_JSON_STRINGIFY: usize = 1024;
+
         pub unsafe fn new(ctx: *mut JSContext) -> Self {
             Self::create_with(ctx)
         }
@@ -339,9 +340,6 @@ pub mod error {
             if !JS_IsExceptionPending(ctx) {
                 return Self {
                     message: "Uncaught exception: exception reported but not pending".to_string(),
-                    filename: String::new(),
-                    lineno: 0,
-                    column: 0,
                 };
             }
 
@@ -351,9 +349,6 @@ pub mod error {
                 JS_ClearPendingException(ctx);
                 return Self {
                     message: "Uncaught exception: JS_GetPendingException failed".to_string(),
-                    filename: String::new(),
-                    lineno: 0,
-                    column: 0,
                 };
             }
 
@@ -361,26 +356,38 @@ pub mod error {
 
             if value.is_object() {
                 rooted!(in(ctx) let object = value.to_object());
-                Self::from_native_error(ctx, object.handle()).unwrap_or_else(|| Self {
-                    message: "Uncaught exception: unknown (can't convert to string)".to_string(),
-                    filename: String::new(),
-                    lineno: 0,
-                    column: 0,
+                Self::from_native_error(ctx, object.handle()).unwrap_or_else(|| {
+                    // try serializing to JSON
+                    let mut data = vec![0; Self::MAX_JSON_STRINGIFY];
+                    if !JS_Stringify(
+                        ctx,
+                        &mut value.handle_mut(),
+                        HandleObject::null(),
+                        HandleValue::null(),
+                        Some(Self::stringify_cb),
+                        data.as_mut_ptr() as *mut libc::c_void,
+                    ) {
+                        return Self {
+                            message: "Uncaught exception: unknown (can't convert to string)"
+                                .to_string(),
+                        };
+                    }
+
+                    if let Ok(data) = std::ffi::CString::from_vec_unchecked(data).into_string() {
+                        Self { message: data }
+                    } else {
+                        Self {
+                            message: "Uncaught exception: unknown (can't convert to string)"
+                                .to_string(),
+                        }
+                    }
                 })
             } else if value.is_string() {
                 let message = js_string_to_utf8(ctx, value.to_string());
-                Self {
-                    message,
-                    filename: String::new(),
-                    lineno: 0,
-                    column: 0,
-                }
+                Self { message }
             } else {
                 Self {
                     message: "Uncaught exception: failed to stringify primitive".to_string(),
-                    filename: String::new(),
-                    lineno: 0,
-                    column: 0,
                 }
             }
         }
@@ -391,20 +398,6 @@ pub mod error {
                 return None;
             }
 
-            let filename = {
-                let filename = (*report)._base.filename as *const u8;
-                if !filename.is_null() {
-                    let length = (0..).find(|idx| *filename.offset(*idx) == 0).unwrap();
-                    let filename = slice::from_raw_parts(filename, length as usize);
-                    String::from_utf8_lossy(filename).into_owned()
-                } else {
-                    "none".to_string()
-                }
-            };
-
-            let lineno = (*report)._base.lineno;
-            let column = (*report)._base.column;
-
             let message = {
                 let message = (*report)._base.message_.data_ as *const u8;
                 let length = (0..).find(|idx| *message.offset(*idx) == 0).unwrap();
@@ -412,22 +405,27 @@ pub mod error {
                 String::from_utf8_lossy(message).into_owned()
             };
 
-            Some(Self {
-                filename,
-                message,
-                lineno,
-                column,
-            })
+            Some(Self { message })
+        }
+
+        unsafe extern "C" fn stringify_cb(
+            bytes: *const u16,
+            len: u32,
+            data: *mut libc::c_void,
+        ) -> bool {
+            let data = std::slice::from_raw_parts_mut(data as *mut u8, Self::MAX_JSON_STRINGIFY);
+            let bytes = std::slice::from_raw_parts(bytes, len as usize);
+            for i in 0..len as usize {
+                // TODO substitute UTF16 chars with unknown symbol in UTF8
+                data[i] = bytes[i].to_le_bytes()[0];
+            }
+            true
         }
     }
 
     impl fmt::Display for JSError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(
-                f,
-                "JavaScript error at {}:{}:{} {}",
-                self.filename, self.lineno, self.column, self.message
-            )
+            write!(f, "JavaScript error: {}", self.message)
         }
     }
 
