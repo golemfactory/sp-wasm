@@ -116,8 +116,14 @@ impl Sandbox {
             // copy files from JS_FS to MemFS
             let output_vfs_path_str: String = output_vfs_path.as_path().to_string_lossy().into();
             self.engine.evaluate_script(&format!(
-                "writeFile('{}', FS.readFile('{}'));",
-                output_vfs_path_str, output_vfs_path_str,
+                "
+                try {{
+                    writeFile('{}', FS.readFile('{}'));
+                }}
+                catch(error) {{
+                    throw new Error(\"Error writing to file '{}': \" + error);
+                }}",
+                output_vfs_path_str, output_vfs_path_str, output_vfs_path_str
             ))?;
 
             // create files on the host
