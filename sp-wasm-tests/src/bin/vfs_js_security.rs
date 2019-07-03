@@ -15,7 +15,7 @@ fn main() {
         Err(Error::Engine(ref err)) => match err {
             EngineError::SMJS(ref err) => assert_eq!(
                 err.message,
-                "failed to write file with error: File not found"
+                "failed to write file '/tmp/test.txt' with error: File not found"
             ),
             _ => panic!("wrong error received"),
         },
