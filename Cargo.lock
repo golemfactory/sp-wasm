@@ -373,18 +373,18 @@ dependencies = [
 
 [[package]]
 name = "sp-wasm"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.89 (registry+https://github.com/rust-lang/crates.io-index)",
- "sp-wasm-engine 0.2.1",
+ "sp-wasm-engine 0.2.2",
 ]
 
 [[package]]
 name = "sp-wasm-engine"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -393,12 +393,12 @@ dependencies = [
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "mozjs 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "path-clean 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "sp-wasm-memfs 0.1.1",
+ "sp-wasm-memfs 0.1.2",
 ]
 
 [[package]]
 name = "sp-wasm-memfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "path-clean 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",

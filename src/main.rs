@@ -5,7 +5,7 @@ use sp_wasm_engine::prelude::*;
 
 fn main() {
     let args = App::new("wasm-sandbox")
-        .version("0.2.1")
+        .version("0.4.0")
         .author("Golem RnD Team <contact@golem.network>")
         .about("Standalone SpiderMonkey instance that can be used to run Emscripten generated Wasm according to the Golem calling convention.")
         .arg(
