@@ -3,6 +3,8 @@
 #[macro_use]
 extern crate mozjs;
 extern crate libc;
+#[macro_use]
+extern crate failure;
 
 pub mod error;
 pub mod sandbox;

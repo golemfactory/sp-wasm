@@ -1,6 +1,5 @@
 use super::VFS;
 use crate::Result;
-
 use mozjs::glue::SetBuildId;
 use mozjs::jsapi::BuildIdCharVector;
 use mozjs::jsapi::CallArgs;
@@ -21,7 +20,6 @@ use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
 use mozjs::rust::{Handle, JSEngine, Runtime, ToString, SIMPLE_GLOBAL_CLASS};
 use mozjs::typedarray::{ArrayBuffer, CreateWith};
-
 use std::ptr;
 
 pub struct Engine {
@@ -32,7 +30,7 @@ pub struct Engine {
 impl Engine {
     pub fn new() -> Result<Self> {
         log::info!("Initializing SpiderMonkey engine");
-        let engine = JSEngine::init().map_err(error::Error::SMInternal)?;
+        let engine = JSEngine::init().map_err(error::Error::from)?;
         let runtime = Runtime::new(engine);
 
         unsafe {
@@ -265,7 +263,6 @@ pub mod error {
     use super::js_string_to_utf8;
     use super::JSContext;
     use super::UndefinedValue;
-
     use mozjs::jsapi::JS_ClearPendingException;
     use mozjs::jsapi::JS_IsExceptionPending;
     use mozjs::rust::jsapi_wrapped::JS_Stringify;
@@ -273,58 +270,49 @@ pub mod error {
     use mozjs::rust::HandleObject;
     use mozjs::rust::HandleValue;
     use mozjs::rust::JSEngineError;
-
-    use std::error::Error as StdError;
-    use std::fmt;
     use std::slice;
 
-    #[derive(Debug)]
+    #[derive(Debug, Fail)]
     pub enum Error {
+        #[fail(display = "couldn't convert &[u8] to Uint8Array")]
         SliceToUint8ArrayConversion,
+
+        #[fail(display = "couldn't convert Uint8Array to Vec<u8>")]
         Uint8ArrayToVecConversion,
-        SMInternal(JSEngineError),
-        SMJS(JSError),
-    }
 
-    impl fmt::Display for Error {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match *self {
-                Error::SliceToUint8ArrayConversion => {
-                    write!(f, "couldn't convert &[u8] to Uint8Array")
-                }
-                Error::Uint8ArrayToVecConversion => {
-                    write!(f, "couldn't convert Uint8Array to Vec<u8>")
-                }
-                Error::SMInternal(ref err) => write!(f, "internal SpiderMonkey error: {:?}", err),
-                Error::SMJS(ref err) => err.fmt(f),
-            }
-        }
-    }
+        #[fail(display = "SpiderMonkey internal error")]
+        SMInternal,
 
-    impl StdError for Error {}
+        #[fail(display = "{}", _0)]
+        SMJS(#[cause] JSError),
+    }
 
     impl PartialEq for Error {
         fn eq(&self, other: &Error) -> bool {
             match (self, other) {
                 (&Error::SliceToUint8ArrayConversion, &Error::SliceToUint8ArrayConversion) => true,
                 (&Error::Uint8ArrayToVecConversion, &Error::Uint8ArrayToVecConversion) => true,
-                (&Error::SMInternal(ref left), &Error::SMInternal(ref right)) => {
-                    match (left, right) {
-                        (JSEngineError::AlreadyInitialized, JSEngineError::AlreadyInitialized) => {
-                            true
-                        }
-                        (JSEngineError::AlreadyShutDown, JSEngineError::AlreadyShutDown) => true,
-                        (JSEngineError::InitFailed, JSEngineError::InitFailed) => true,
-                        (_, _) => false,
-                    }
-                }
+                (&Error::SMInternal, &Error::SMInternal) => true,
                 (&Error::SMJS(ref left), &Error::SMJS(ref right)) => left == right,
                 (_, _) => false,
             }
         }
     }
 
-    #[derive(Debug, PartialEq)]
+    impl From<JSEngineError> for Error {
+        fn from(_err: JSEngineError) -> Self {
+            Error::SMInternal
+        }
+    }
+
+    impl From<JSError> for Error {
+        fn from(err: JSError) -> Self {
+            Error::SMJS(err)
+        }
+    }
+
+    #[derive(Debug, PartialEq, Fail)]
+    #[fail(display = "JavaScript error: {}", message)]
     pub struct JSError {
         pub message: String,
     }
@@ -422,11 +410,4 @@ pub mod error {
             true
         }
     }
-
-    impl fmt::Display for JSError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "JavaScript error: {}", self.message)
-        }
-    }
-
 }
