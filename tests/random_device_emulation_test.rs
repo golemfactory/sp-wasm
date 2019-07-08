@@ -1,6 +1,7 @@
 use sp_wasm_engine::prelude::*;
 
-fn main() {
+#[test]
+fn random_device_emulation() {
     let engine = Engine::new().unwrap();
     let v1 = engine
         .evaluate_script("golem_randEmu()")

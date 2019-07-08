@@ -1,9 +1,27 @@
+[package]
+name = "sp-wasm"
+version = "0.2.1"
+authors = ["Jakub Konka <jakub.konka@golem.network>"]
+edition = "2018"
+
+[dependencies]
+sp-wasm-engine = { path = "sp-wasm-engine" }
+serde = { version = "1", features = ["derive"] }
+env_logger = "0.6"
+log = "0.4"
+clap = "2.33"
+
+[features]
+debugmozjs = ["sp-wasm-engine/debugmozjs"]
+
+[[bin]]
+name = "wasm-sandbox"
+path = "src/main.rs"
+
 [workspace]
 members = [
-    'sp-wasm-cli',
     'sp-wasm-engine',
-    'sp-wasm-memfs',
-    'sp-wasm-tests'
+    'sp-wasm-memfs'
 ]
 
 [profile.release]
