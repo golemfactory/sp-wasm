@@ -63,7 +63,7 @@ jobs:
   - task: CopyFiles@2
     displayName: Copy assets
     inputs:
-      sourceFolder: '$(Build.SourcesDirectory)/target/$(TARGET)/release'
+      sourceFolder: '$(Build.SourcesDirectory)/target/release'
       contents: |
         wasm-sandbox
       targetFolder: '$(Build.BinariesDirectory)/sp-wasm'
