@@ -400,6 +400,7 @@ dependencies = [
 name = "sp-wasm-memfs"
 version = "0.1.1"
 dependencies = [
+ "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "path-clean 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tool 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

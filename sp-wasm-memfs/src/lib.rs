@@ -9,3 +9,6 @@ pub mod prelude {
     pub use super::file::File;
     pub use super::memfs::MemFS;
 }
+
+#[macro_use]
+extern crate failure;

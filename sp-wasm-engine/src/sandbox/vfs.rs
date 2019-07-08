@@ -79,7 +79,7 @@ impl VirtualFS {
             dest_path.push(
                 source_path
                     .file_name()
-                    .ok_or_else(|| Error::InvalidPath(source_path.clone()))?,
+                    .ok_or_else(|| Error::InvalidPath(source_path.to_string_lossy().to_string()))?,
             );
 
             fifo.push_back((source_path, dest_path));
@@ -102,11 +102,9 @@ impl VirtualFS {
                     let source_path = entry.path();
 
                     let mut dest_path = dest_path.clone();
-                    dest_path.push(
-                        source_path
-                            .file_name()
-                            .ok_or_else(|| Error::InvalidPath(source_path.clone()))?,
-                    );
+                    dest_path.push(source_path.file_name().ok_or_else(|| {
+                        Error::InvalidPath(source_path.to_string_lossy().to_string())
+                    })?);
 
                     fifo.push_back((source_path, dest_path));
                 }

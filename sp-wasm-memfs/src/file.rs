@@ -1,7 +1,6 @@
+use super::node::*;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
-
-use super::node::*;
 
 #[derive(Debug)]
 pub struct File {

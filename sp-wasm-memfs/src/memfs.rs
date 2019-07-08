@@ -1,13 +1,11 @@
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-
-use path_clean::PathClean;
-use tool::prelude::*;
-
 use super::error::*;
 use super::file::*;
 use super::node::*;
 use super::Result;
+use path_clean::PathClean;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use tool::prelude::*;
 
 #[derive(Debug)]
 pub struct MemFS {
@@ -31,7 +29,9 @@ impl MemFS {
             Some(component) => component
                 .as_os_str()
                 .to_str()
-                .ok_or(Error::InvalidPath)?
+                .ok_or(Error::InvalidPath(
+                    component.as_os_str().to_string_lossy().to_string(),
+                ))?
                 .to_owned(),
             None => return Ok(node),
         };
@@ -46,7 +46,7 @@ impl MemFS {
             }
         }
 
-        Err(Error::NotFound)
+        Err(Error::NotFound(name))
     }
 
     fn normalize_path<P>(path: P) -> Result<PathBuf>
@@ -54,7 +54,9 @@ impl MemFS {
         P: AsRef<Path>,
     {
         if !path.as_ref().has_root() {
-            return Err(Error::InvalidPath);
+            return Err(Error::InvalidPath(
+                path.as_ref().to_string_lossy().to_string(),
+            ));
         }
 
         Ok(PathBuf::from(path.as_ref()).clean())
@@ -69,7 +71,7 @@ impl MemFS {
         let filename = path
             .file_name()
             .and_then(|s| s.to_str())
-            .ok_or(Error::InvalidPath)?;
+            .ok_or(Error::InvalidPath(path.to_string_lossy().to_string()))?;
 
         Ok((parent.to_owned(), filename.to_owned()))
     }
@@ -204,7 +206,7 @@ mod test {
         assert_eq!(MemFS::resolve_parent("/").unwrap_err(), Error::IsRoot);
         assert_eq!(
             MemFS::resolve_parent("tmp").unwrap_err(),
-            Error::InvalidPath
+            Error::InvalidPath("tmp".to_owned())
         );
 
         assert_eq!(
@@ -232,9 +234,15 @@ mod test {
         assert!(fs.is_dir("/tmp/a/b")?);
         assert!(fs.is_dir("/dev")?);
 
-        assert_eq!(fs.create_dir("/tmp/c/d").unwrap_err(), Error::NotFound);
+        assert_eq!(
+            fs.create_dir("/tmp/c/d").unwrap_err(),
+            Error::NotFound("c".to_owned())
+        );
         assert_eq!(fs.create_dir("/").unwrap_err(), Error::IsRoot);
-        assert_eq!(fs.create_dir("tmp/a/c").unwrap_err(), Error::InvalidPath);
+        assert_eq!(
+            fs.create_dir("tmp/a/c").unwrap_err(),
+            Error::InvalidPath("tmp/a/c".to_owned())
+        );
 
         Ok(())
     }
@@ -268,8 +276,14 @@ mod test {
         assert!(fs.is_file("/dev/random")?);
 
         assert_eq!(fs.create_file("/").unwrap_err(), Error::IsRoot);
-        assert_eq!(fs.create_file("c").unwrap_err(), Error::InvalidPath);
-        assert_eq!(fs.create_file("/d/c").unwrap_err(), Error::NotFound);
+        assert_eq!(
+            fs.create_file("c").unwrap_err(),
+            Error::InvalidPath("c".to_owned())
+        );
+        assert_eq!(
+            fs.create_file("/d/c").unwrap_err(),
+            Error::NotFound("d".to_owned())
+        );
 
         Ok(())
     }
@@ -283,8 +297,14 @@ mod test {
         assert!(fs.open_file("/test").is_ok());
 
         assert_eq!(fs.open_file("/").unwrap_err(), Error::IsRoot);
-        assert_eq!(fs.open_file("/bbb").unwrap_err(), Error::NotFound);
-        assert_eq!(fs.open_file("bbb").unwrap_err(), Error::InvalidPath);
+        assert_eq!(
+            fs.open_file("/bbb").unwrap_err(),
+            Error::NotFound("bbb".to_owned())
+        );
+        assert_eq!(
+            fs.open_file("bbb").unwrap_err(),
+            Error::InvalidPath("bbb".to_owned())
+        );
 
         Ok(())
     }
