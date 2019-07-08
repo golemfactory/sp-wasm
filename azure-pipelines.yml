@@ -79,8 +79,8 @@ jobs:
   - task: GithubRelease@0
     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     inputs:
-      gitHubConnection: 'kubkon'
-      repositoryName: 'golemfactory/sp-wasm'
+      gitHubConnection: golemfactory
+      repositoryName: golemfactory/sp-wasm
       action: 'edit'
       target: '$(build.sourceVersion)'
       tagSource: 'manual'
