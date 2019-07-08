@@ -1,12 +1,10 @@
+use super::Result;
+use crate::error::Error;
+use sp_wasm_memfs::prelude::*;
 use std::collections::VecDeque;
 use std::fs;
 use std::io::{Read, Write};
 use std::path;
-
-use sp_wasm_memfs::prelude::*;
-
-use super::Result;
-use crate::error::Error;
 
 pub struct VirtualFS {
     backend: MemFS,
@@ -78,7 +76,11 @@ impl VirtualFS {
             let source_path = entry.path();
 
             let mut dest_path = dest_path.clone();
-            dest_path.push(source_path.file_name().ok_or(Error::InvalidPath)?);
+            dest_path.push(
+                source_path
+                    .file_name()
+                    .ok_or_else(|| Error::InvalidPath(source_path.clone()))?,
+            );
 
             fifo.push_back((source_path, dest_path));
         }
@@ -100,7 +102,11 @@ impl VirtualFS {
                     let source_path = entry.path();
 
                     let mut dest_path = dest_path.clone();
-                    dest_path.push(source_path.file_name().ok_or(Error::InvalidPath)?);
+                    dest_path.push(
+                        source_path
+                            .file_name()
+                            .ok_or_else(|| Error::InvalidPath(source_path.clone()))?,
+                    );
 
                     fifo.push_back((source_path, dest_path));
                 }
