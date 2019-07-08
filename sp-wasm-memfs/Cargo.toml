@@ -1,6 +1,6 @@
 [package]
 name = "sp-wasm-memfs"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Jakub Konka <jakub.konka@golem.network>"]
 edition = "2018"
 

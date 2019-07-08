@@ -1,6 +1,6 @@
 [package]
 name = "sp-wasm"
-version = "0.2.1"
+version = "0.4.0"
 authors = ["Jakub Konka <jakub.konka@golem.network>"]
 edition = "2018"
 
