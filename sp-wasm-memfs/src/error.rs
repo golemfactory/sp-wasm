@@ -1,32 +1,25 @@
-use std::error::Error as StdError;
-use std::fmt;
-use std::io::Error as IoError;
+use std::io;
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub enum Error {
-    AlreadyExists,
-    NotFound,
-    InvalidPath,
+    #[fail(display = "file '{}' already exists", _0)]
+    AlreadyExists(String),
+
+    #[fail(display = "file '{}' not found", _0)]
+    NotFound(String),
+
+    #[fail(display = "invalid path: '{}'", _0)]
+    InvalidPath(String),
+
+    #[fail(display = "file is root")]
     IsRoot,
-    Io(IoError),
+
+    #[fail(display = "{}", _0)]
+    Io(#[cause] io::Error),
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::AlreadyExists => write!(f, "File already exists"),
-            Error::NotFound => write!(f, "File not found"),
-            Error::InvalidPath => write!(f, "Invalid path"),
-            Error::IsRoot => write!(f, "File is root"),
-            Error::Io(ref err) => err.fmt(f),
-        }
-    }
-}
-
-impl StdError for Error {}
-
-impl From<IoError> for Error {
-    fn from(err: IoError) -> Error {
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
         Error::Io(err)
     }
 }
@@ -34,9 +27,9 @@ impl From<IoError> for Error {
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {
         match (self, other) {
-            (&Error::AlreadyExists, &Error::AlreadyExists) => true,
-            (&Error::NotFound, &Error::NotFound) => true,
-            (&Error::InvalidPath, &Error::InvalidPath) => true,
+            (&Error::AlreadyExists(ref left), &Error::AlreadyExists(ref right)) => left == right,
+            (&Error::NotFound(ref left), &Error::NotFound(ref right)) => left == right,
+            (&Error::InvalidPath(ref left), &Error::InvalidPath(ref right)) => left == right,
             (&Error::IsRoot, &Error::IsRoot) => true,
             (&Error::Io(ref left), &Error::Io(ref right)) => left.kind() == right.kind(),
             (_, _) => false,

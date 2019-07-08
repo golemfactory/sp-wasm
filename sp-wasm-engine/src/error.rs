@@ -1,13 +1,13 @@
 use super::sandbox::engine::error::Error as EngineError;
 use sp_wasm_memfs::error::Error as MemFSError;
 use std::io::Error as IoError;
-use std::path::{PathBuf, StripPrefixError};
+use std::path::StripPrefixError;
 use std::string::FromUtf8Error;
 
 #[derive(Debug, Fail)]
 pub enum Error {
-    #[fail(display = "invalid path: {:?}", _0)]
-    InvalidPath(PathBuf),
+    #[fail(display = "invalid path: {}", _0)]
+    InvalidPath(String),
 
     #[fail(display = "{}", _0)]
     StripPrefix(#[cause] StripPrefixError),
