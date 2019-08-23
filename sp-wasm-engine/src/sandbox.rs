@@ -43,6 +43,16 @@ impl Sandbox {
         Ok(self)
     }
 
+
+    pub fn init(&mut self) -> Result<()> {
+        self.engine.evaluate_script(r#"
+        Module['preRun'] = function() {
+            FS.init();
+        };
+        "#)?;
+        Ok(())
+    }
+
     pub fn load_input_files<S>(self, input_path: S) -> Result<Self>
     where
         S: AsRef<str>,

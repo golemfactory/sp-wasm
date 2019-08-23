@@ -1,74 +1,61 @@
 #![warn(clippy::all)]
 
-use clap::{value_t_or_exit, values_t_or_exit, App, Arg};
 use sp_wasm_engine::prelude::*;
+use std::path::PathBuf;
+use structopt::StructOpt;
 
-fn main() {
-    let args = App::new("wasm-sandbox")
-        .version("0.4.0")
-        .author("Golem RnD Team <contact@golem.network>")
-        .about("Standalone SpiderMonkey instance that can be used to run Emscripten generated Wasm according to the Golem calling convention.")
-        .arg(
-            Arg::with_name("input_dir")
-                .short("I")
-                .value_name("input-dir")
-                .required(true)
-                .takes_value(true)
-                .help("Path to input dir"),
-        )
-        .arg(
-            Arg::with_name("output_dir")
-                .short("O")
-                .value_name("output-dir")
-                .required(true)
-                .takes_value(true)
-                .help("Path to output dir"),
-        )
-        .arg(
-            Arg::with_name("wasm_js")
-                .short("j")
-                .value_name("wasm-js")
-                .required(true)
-                .takes_value(true)
-                .help("Path to Emscripten JavaScript glue code"),
-        )
-        .arg(
-            Arg::with_name("wasm_bin")
-                .short("w")
-                .value_name("wasm-bin")
-                .required(true)
-                .takes_value(true)
-                .help("Path to Emscripten Wasm binary"),
-        )
-        .arg(
-            Arg::with_name("output_file")
-                .short("o")
-                .value_name("output-file")
-                .required(true)
-                .multiple(true)
-                .help("Path to expected output file"),
-        )
-        .arg(
-            Arg::with_name("wasm_args")
-                .value_name("wasm-args")
-                .multiple(true)
-                .help("Wasm program args"),
-        )
-        .get_matches();
+#[derive(StructOpt)]
+struct Opts {
+    #[structopt(subcommand)]
+    command : Command
+}
 
+#[derive(StructOpt)]
+enum Command {
+    /// Run a command
+    #[structopt(name="run")]
+    Run {
+        /// Memory limit (0 - unlimited)
+        #[structopt(long,short,default_value = "0")]
+        memory : u64,
+        /// Bind mount a volume
+        #[structopt(long,short)]
+        volume : Vec<String>,
+        #[structopt(long="workdir",short)]
+        work_dir : Option<String>,
+        program : PathBuf,
+        args : Vec<String>
+    }
+}
+
+fn main() -> failure::Fallible<()> {
+
+    let opts = Opts::from_args();
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
 
-    let input_dir = value_t_or_exit!(args.value_of("input_dir"), String);
-    let output_dir = value_t_or_exit!(args.value_of("output_dir"), String);
-    let wasm_js = value_t_or_exit!(args.value_of("wasm_js"), String);
-    let wasm_bin = value_t_or_exit!(args.value_of("wasm_bin"), String);
-    let output_files = values_t_or_exit!(args.values_of("output_file"), String);
-    let wasm_args = values_t_or_exit!(args.values_of("wasm_args"), String);
+    match opts.command {
+        Command::Run { memory, volume, work_dir, program, args
+        } => {
+            let mut program_js = program.with_extension("js");
+            let mut program_wasm = program.with_extension("wasm");
 
-    Sandbox::new()
-        .and_then(|sandbox| sandbox.set_exec_args(wasm_args.iter()))
-        .and_then(|sandbox| sandbox.load_input_files(input_dir))
+            let mut sb = Sandbox::new()?
+                .set_exec_args(args)?;
+
+            sb.init()?;
+
+            sb.run(program_js.to_str().unwrap(), program_wasm.to_str().unwrap());
+
+
+            /*.and_then(|sandbox| sandbox.load_input_files(input_dir))
         .and_then(|sandbox| sandbox.run(wasm_js, wasm_bin))
-        .and_then(|sandbox| sandbox.save_output_files(output_dir, output_files.iter()))
-        .unwrap_or_else(|err| eprintln!("{}", err));
+        .and_then(|sandbox| sandbox.save_output_files(output_dir, output_files.iter()))?;*/
+
+
+        }
+    }
+
+
+
+    Ok(())
 }

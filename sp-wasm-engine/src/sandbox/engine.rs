@@ -1,7 +1,7 @@
 use super::VFS;
 use crate::Result;
 use mozjs::glue::SetBuildId;
-use mozjs::jsapi::BuildIdCharVector;
+use mozjs::jsapi::{BuildIdCharVector, SetWarningReporter, InitSelfHostedCode};
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::CompartmentOptions;
 use mozjs::jsapi::ContextOptionsRef;
@@ -12,7 +12,7 @@ use mozjs::jsapi::JSString;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_EncodeStringToUTF8;
 use mozjs::jsapi::JS_NewGlobalObject;
-use mozjs::jsapi::JS_ReportErrorASCII;
+use mozjs::jsapi::{JS_ReportErrorASCII, JSErrorReport};
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetBuildIdOp;
 use mozjs::jsapi::Value;
@@ -20,7 +20,8 @@ use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
 use mozjs::rust::{Handle, JSEngine, Runtime, ToString, SIMPLE_GLOBAL_CLASS};
 use mozjs::typedarray::{ArrayBuffer, CreateWith};
-use std::ptr;
+use std::{ptr, ffi};
+use core::slice;
 
 pub struct Engine {
     runtime: Runtime,
@@ -58,6 +59,8 @@ impl Engine {
         ctx_opts.set_wasmBaseline_(true);
         ctx_opts.set_wasmIon_(true);
         SetBuildIdOp(ctx, Some(Self::sp_build_id));
+
+        SetWarningReporter(ctx, Some(report_warning));
 
         // callbacks
         rooted!(in(ctx) let global_root = global);
@@ -154,6 +157,7 @@ impl Engine {
     }
 
     unsafe extern "C" fn read_file(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
+
         let args = CallArgs::from_vp(vp, argc);
 
         if args.argc_ != 1 {
@@ -168,12 +172,11 @@ impl Engine {
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
         if let Err(err) = (|| -> Result<()> {
-            let contents = VFS.lock().unwrap().read_file(&filename)?;
+            let contents : Vec<u8> = VFS.lock().unwrap().read_file(&filename)?;
 
             rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
-            ArrayBuffer::create(ctx, CreateWith::Slice(&contents), rval.handle_mut())
+            ArrayBuffer::create(ctx, CreateWith::Slice(Box::leak(contents.into_boxed_slice())), rval.handle_mut())
                 .map_err(|_| error::Error::SliceToUint8ArrayConversion)?;
-
             args.rval().set(ObjectValue(rval.get()));
             Ok(())
         })() {
@@ -410,4 +413,28 @@ pub mod error {
             true
         }
     }
+}
+
+pub unsafe extern fn report_warning(_cx: *mut JSContext, report: *mut JSErrorReport) {
+    fn latin1_to_string(bytes: &[u8]) -> String {
+        bytes.iter().map(|c| std::char::from_u32(*c as u32).unwrap()).collect()
+    }
+
+    let fnptr = (*report)._base.filename;
+    let fname = if !fnptr.is_null() {
+        let c_str = ffi::CStr::from_ptr(fnptr);
+        latin1_to_string(c_str.to_bytes())
+    } else {
+        "none".to_string()
+    };
+
+    let lineno = (*report)._base.lineno;
+    let column = (*report)._base.column;
+
+    let msg_ptr = (*report)._base.message_.data_ as *const u8;
+    let msg_len = (0usize..).find(|&i| *msg_ptr.offset(i as isize) == 0).unwrap();
+    let msg_slice = slice::from_raw_parts(msg_ptr, msg_len);
+    let msg = std::str::from_utf8_unchecked(msg_slice);
+
+    log::warn!("Warning at {}:{}:{}: {}\n", fname, lineno, column, msg);
 }
