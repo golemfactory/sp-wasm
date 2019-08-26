@@ -16,13 +16,12 @@ use mozjs::jsapi::SetBuildIdOp;
 use mozjs::jsapi::Value;
 use mozjs::jsapi::{self, CallArgs};
 use mozjs::jsapi::{BuildIdCharVector, InitSelfHostedCode, SetWarningReporter};
-use mozjs::jsapi::{JSErrorReport, JS_ReportErrorASCII,  JS};
+use mozjs::jsapi::{JSErrorReport, JS_ReportErrorASCII, JS};
 use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
 use mozjs::panic::maybe_resume_unwind;
 use mozjs::rust::{
-    CompileOptionsWrapper, Handle, JSEngine, MutableHandleValue, ToString,
-    SIMPLE_GLOBAL_CLASS,
+    CompileOptionsWrapper, Handle, JSEngine, MutableHandleValue, ToString, SIMPLE_GLOBAL_CLASS,
 };
 use mozjs::typedarray::{ArrayBuffer, CreateWith};
 use std::os::raw::c_uint;
@@ -136,8 +135,6 @@ impl Engine {
     }
 
     unsafe fn create_with(engine: Arc<JSEngine>, ctx: *mut JSContext) -> Result<Self> {
-
-
         if ctx.is_null() {
             return Err(error::Error::SMInternal.into());
         }
@@ -246,7 +243,7 @@ impl Engine {
     }
 
     unsafe extern "C" fn sp_build_id(build_id: *mut BuildIdCharVector) -> bool {
-        let sp_id = b"SP\0";
+        let sp_id = b"gwasm\0";
         SetBuildId(build_id, &sp_id[0], sp_id.len())
     }
 

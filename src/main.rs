@@ -6,6 +6,8 @@ use structopt::StructOpt;
 
 #[derive(StructOpt)]
 struct Opts {
+    #[structopt(short, parse(from_occurrences))]
+    verbose: u8,
     #[structopt(subcommand)]
     command: Command,
 }
@@ -30,7 +32,13 @@ enum Command {
 
 fn main() -> failure::Fallible<()> {
     let opts = Opts::from_args();
-    env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
+    env_logger::init_from_env(
+        env_logger::Env::default().default_filter_or(match opts.verbose {
+            0 => "error",
+            1 => "info",
+            _ => "sp_wasm_engine=debug,info",
+        }),
+    );
 
     match opts.command {
         Command::Run {
