@@ -43,13 +43,14 @@ impl Sandbox {
         Ok(self)
     }
 
-
     pub fn init(&mut self) -> Result<()> {
-        self.engine.evaluate_script(r#"
+        self.engine.evaluate_script(
+            r#"
         Module['preRun'] = function() {
             FS.init();
         };
-        "#)?;
+        "#,
+        )?;
         Ok(())
     }
 

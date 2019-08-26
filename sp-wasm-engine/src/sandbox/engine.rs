@@ -1,8 +1,7 @@
 use super::VFS;
 use crate::Result;
+use core::slice;
 use mozjs::glue::SetBuildId;
-use mozjs::jsapi::{BuildIdCharVector, SetWarningReporter, InitSelfHostedCode};
-use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::CompartmentOptions;
 use mozjs::jsapi::ContextOptionsRef;
 use mozjs::jsapi::JSAutoCompartment;
@@ -12,19 +11,115 @@ use mozjs::jsapi::JSString;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_EncodeStringToUTF8;
 use mozjs::jsapi::JS_NewGlobalObject;
-use mozjs::jsapi::{JS_ReportErrorASCII, JSErrorReport};
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetBuildIdOp;
 use mozjs::jsapi::Value;
+use mozjs::jsapi::{self, CallArgs};
+use mozjs::jsapi::{BuildIdCharVector, InitSelfHostedCode, SetWarningReporter};
+use mozjs::jsapi::{JSErrorReport, JS_ReportErrorASCII,  JS};
 use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::{Handle, JSEngine, Runtime, ToString, SIMPLE_GLOBAL_CLASS};
+use mozjs::panic::maybe_resume_unwind;
+use mozjs::rust::{
+    CompileOptionsWrapper, Handle, JSEngine, MutableHandleValue, ToString,
+    SIMPLE_GLOBAL_CLASS,
+};
 use mozjs::typedarray::{ArrayBuffer, CreateWith};
-use std::{ptr, ffi};
-use core::slice;
+use std::os::raw::c_uint;
+use std::sync::Arc;
+use std::{ffi, ptr};
+
+const STACK_QUOTA: usize = 128 * 8 * 1024;
+const SYSTEM_CODE_BUFFER: usize = 10 * 1024;
+const TRUSTED_SCRIPT_BUFFER: usize = 8 * 12800;
+
+unsafe fn new_root_context() -> *mut JSContext {
+    let cx = jsapi::JS_NewContext(
+        32_u32 * 1024_u32 * 1024_u32,
+        1 << 20 as u32,
+        ptr::null_mut(),
+    );
+    if cx.is_null() {
+        return cx;
+    }
+    jsapi::JS_SetGCParameter(cx, jsapi::JSGCParamKey::JSGC_MAX_BYTES, std::u32::MAX);
+    jsapi::JS_SetNativeStackQuota(
+        cx,
+        STACK_QUOTA,
+        STACK_QUOTA - SYSTEM_CODE_BUFFER,
+        STACK_QUOTA - SYSTEM_CODE_BUFFER - TRUSTED_SCRIPT_BUFFER,
+    );
+    jsapi::UseInternalJobQueues(cx, false);
+    InitSelfHostedCode(cx);
+    let contextopts = ContextOptionsRef(cx);
+    (*contextopts).set_baseline_(true);
+    (*contextopts).set_ion_(true);
+    (*contextopts).set_nativeRegExp_(true);
+    (*contextopts).set_wasm_(true);
+    (*contextopts).set_wasmBaseline_(true);
+    (*contextopts).set_wasmIon_(true);
+    jsapi::JS_BeginRequest(cx);
+    cx
+}
+
+pub fn evaluate_script(
+    cx: *mut JSContext,
+    glob: mozjs::rust::HandleObject,
+    script: &str,
+    filename: &str,
+    line_num: u32,
+    rval: MutableHandleValue,
+) -> std::result::Result<(), ()> {
+    let script_utf16: Vec<u16> = script.encode_utf16().collect();
+    let filename_cstr = ffi::CString::new(filename.as_bytes()).unwrap();
+    log::debug!(
+        "Evaluating script from {} with content {}",
+        filename,
+        script
+    );
+    // SpiderMonkey does not approve of null pointers.
+    let (ptr, len) = if script_utf16.len() == 0 {
+        static EMPTY: &'static [u16] = &[];
+        (EMPTY.as_ptr(), 0)
+    } else {
+        (script_utf16.as_ptr(), script_utf16.len() as c_uint)
+    };
+    assert!(!ptr.is_null());
+    let _ac = JSAutoCompartment::new(cx, glob.get());
+    let options = CompileOptionsWrapper::new(cx, filename_cstr.as_ptr(), line_num);
+
+    unsafe {
+        if !JS::Evaluate2(
+            cx,
+            options.ptr,
+            ptr as *const u16,
+            len as libc::size_t,
+            rval.into(),
+        ) {
+            log::debug!("...err!");
+            maybe_resume_unwind();
+            Err(())
+        } else {
+            // we could return the script result but then we'd have
+            // to root it and so forth and, really, who cares?
+            log::debug!("...ok!");
+            Ok(())
+        }
+    }
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        unsafe {
+            jsapi::JS_EndRequest(self.cx);
+            jsapi::JS_DestroyContext(self.cx);
+        }
+    }
+}
 
 pub struct Engine {
-    runtime: Runtime,
+    _engine: Arc<JSEngine>,
+    cx: *mut JSContext,
     global: *mut JSObject,
 }
 
@@ -32,18 +127,23 @@ impl Engine {
     pub fn new() -> Result<Self> {
         log::info!("Initializing SpiderMonkey engine");
         let engine = JSEngine::init().map_err(error::Error::from)?;
-        let runtime = Runtime::new(engine);
 
         unsafe {
-            let engine = Self::create_with(runtime)?;
+            let cx = new_root_context();
+            let engine = Self::create_with(engine, cx)?;
             Ok(engine)
         }
     }
 
-    unsafe fn create_with(runtime: Runtime) -> Result<Self> {
+    unsafe fn create_with(engine: Arc<JSEngine>, ctx: *mut JSContext) -> Result<Self> {
+
+
+        if ctx.is_null() {
+            return Err(error::Error::SMInternal.into());
+        }
+
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
         let c_option = CompartmentOptions::default();
-        let ctx = runtime.cx();
 
         let global = JS_NewGlobalObject(
             ctx,
@@ -52,14 +152,8 @@ impl Engine {
             h_option,
             &c_option,
         );
-
-        // runtime options
-        let ctx_opts = &mut *ContextOptionsRef(ctx);
-        ctx_opts.set_wasm_(true);
-        ctx_opts.set_wasmBaseline_(true);
-        ctx_opts.set_wasmIon_(true);
         SetBuildIdOp(ctx, Some(Self::sp_build_id));
-
+        //JS::InitDispatchToEventLoop(ctx, Some(dispatch_to_event_loop_callback), ptr::null_mut());
         SetWarningReporter(ctx, Some(report_warning));
 
         // callbacks
@@ -96,14 +190,14 @@ impl Engine {
 
         // init print funcs
         Self::eval(
-            &runtime,
+            ctx,
             global,
             "var Module = { 'printErr': print, 'print': print };",
         )?;
 
         // init /dev/random emulation
         Self::eval(
-            &runtime,
+            ctx,
             global,
             "var golem_MAGIC = 0;
             golem_randEmu = function() {
@@ -118,27 +212,27 @@ impl Engine {
             };",
         )?;
 
-        Ok(Self { runtime, global })
+        Ok(Self {
+            _engine: engine,
+            cx: ctx,
+            global,
+        })
     }
 
-    unsafe fn eval<S>(runtime: &Runtime, global: *mut JSObject, script: S) -> Result<Value>
+    unsafe fn eval<S>(ctx: *mut JSContext, global: *mut JSObject, script: S) -> Result<Value>
     where
         S: AsRef<str>,
     {
-        let ctx = runtime.cx();
-
         rooted!(in(ctx) let global_root = global);
         let global = global_root.handle();
         let _ac = JSAutoCompartment::new(ctx, global.get());
-
         rooted!(in(ctx) let mut rval = UndefinedValue());
 
-        if runtime
-            .evaluate_script(global, script.as_ref(), "noname", 0, rval.handle_mut())
-            .is_err()
-        {
+        if evaluate_script(ctx, global, script.as_ref(), "noname", 0, rval.handle_mut()).is_err() {
             return Err(error::Error::SMJS(error::JSError::new(ctx)).into());
         }
+
+        jsapi::RunJobs(ctx);
 
         Ok(rval.get())
     }
@@ -148,7 +242,7 @@ impl Engine {
         S: AsRef<str>,
     {
         log::debug!("Evaluating script {}", script.as_ref());
-        unsafe { Self::eval(&self.runtime, self.global, script) }
+        unsafe { Self::eval(self.cx, self.global, script) }
     }
 
     unsafe extern "C" fn sp_build_id(build_id: *mut BuildIdCharVector) -> bool {
@@ -157,7 +251,6 @@ impl Engine {
     }
 
     unsafe extern "C" fn read_file(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
-
         let args = CallArgs::from_vp(vp, argc);
 
         if args.argc_ != 1 {
@@ -172,11 +265,15 @@ impl Engine {
         let filename = js_string_to_utf8(ctx, ToString(ctx, arg));
 
         if let Err(err) = (|| -> Result<()> {
-            let contents : Vec<u8> = VFS.lock().unwrap().read_file(&filename)?;
+            let contents: Vec<u8> = VFS.lock().unwrap().read_file(&filename)?;
 
             rooted!(in(ctx) let mut rval = ptr::null_mut::<JSObject>());
-            ArrayBuffer::create(ctx, CreateWith::Slice(Box::leak(contents.into_boxed_slice())), rval.handle_mut())
-                .map_err(|_| error::Error::SliceToUint8ArrayConversion)?;
+            ArrayBuffer::create(
+                ctx,
+                CreateWith::Slice(Box::leak(contents.into_boxed_slice())),
+                rval.handle_mut(),
+            )
+            .map_err(|_| error::Error::SliceToUint8ArrayConversion)?;
             args.rval().set(ObjectValue(rval.get()));
             Ok(())
         })() {
@@ -415,9 +512,12 @@ pub mod error {
     }
 }
 
-pub unsafe extern fn report_warning(_cx: *mut JSContext, report: *mut JSErrorReport) {
+pub unsafe extern "C" fn report_warning(_cx: *mut JSContext, report: *mut JSErrorReport) {
     fn latin1_to_string(bytes: &[u8]) -> String {
-        bytes.iter().map(|c| std::char::from_u32(*c as u32).unwrap()).collect()
+        bytes
+            .iter()
+            .map(|c| std::char::from_u32(*c as u32).unwrap())
+            .collect()
     }
 
     let fnptr = (*report)._base.filename;
@@ -432,7 +532,9 @@ pub unsafe extern fn report_warning(_cx: *mut JSContext, report: *mut JSErrorRep
     let column = (*report)._base.column;
 
     let msg_ptr = (*report)._base.message_.data_ as *const u8;
-    let msg_len = (0usize..).find(|&i| *msg_ptr.offset(i as isize) == 0).unwrap();
+    let msg_len = (0usize..)
+        .find(|&i| *msg_ptr.offset(i as isize) == 0)
+        .unwrap();
     let msg_slice = slice::from_raw_parts(msg_ptr, msg_len);
     let msg = std::str::from_utf8_unchecked(msg_slice);
 
