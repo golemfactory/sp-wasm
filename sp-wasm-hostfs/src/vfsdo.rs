@@ -1,0 +1,85 @@
+use mozjs::{
+    rooted,
+    conversions::ToJSValConvertible,
+    jsapi as js,
+    rust::wrappers as jsw,
+    jsval,
+    rust::MutableHandleValue
+};
+use libc::c_char;
+
+#[derive(Clone, Copy)]
+pub enum NodeType {
+    Dir, File
+}
+
+#[derive(Clone, Copy)]
+pub enum NodeMode {
+    Ro, Rw, Wo
+}
+
+impl ToJSValConvertible for NodeMode {
+    unsafe fn to_jsval(&self, cx: *mut js::JSContext, rval: MutableHandleValue) {
+        match self {
+            NodeMode::Ro => "ro",
+            NodeMode::Rw => "rw",
+            NodeMode::Wo => "wo",
+        }.to_jsval(cx, rval);
+    }
+}
+
+impl ToJSValConvertible for NodeType {
+    unsafe fn to_jsval(&self, cx: *mut js::JSContext, rval: MutableHandleValue) {
+        match self {
+            NodeType::Dir => "d",
+            NodeType::File => "f"
+        }.to_jsval(cx, rval)
+    }
+}
+
+
+pub struct VolumeInfo {
+    pub id : u32,
+    pub mount_point : String,
+    pub mode : NodeMode
+}
+
+impl ToJSValConvertible for VolumeInfo {
+    unsafe fn to_jsval(&self, cx: *mut js::JSContext, mut rval: MutableHandleValue) {
+        rooted!(in(cx) let mut obj = js::JS_NewPlainObject(cx));
+        rooted!(in(cx) let id = jsval::UInt32Value(self.id));
+        rooted!(in(cx) let mut mount_point = jsval::UndefinedValue());
+        rooted!(in(cx) let mut mode = jsval::UndefinedValue());
+        self.mount_point.to_jsval(cx, mount_point.handle_mut());
+        self.mode.to_jsval(cx, mode.handle_mut());
+        jsw::JS_SetProperty(cx, obj.handle(), b"id\0".as_ptr() as *const _, id.handle());
+        jsw::JS_SetProperty(cx, obj.handle(), b"mount_point\0".as_ptr() as *const _, mount_point.handle());
+        jsw::JS_SetProperty(cx, obj.handle(), b"mode\0".as_ptr() as *const _, mode.handle());
+        jsw::JS_FreezeObject(cx, obj.handle());
+        rval.set(jsval::ObjectValue(obj.get()))
+    }
+}
+
+pub struct NodeInfo {
+    pub n_type : NodeType,
+    pub n_mode : NodeMode
+}
+
+impl ToJSValConvertible for NodeInfo {
+
+    unsafe fn to_jsval(&self, cx: *mut js::JSContext, mut rval: MutableHandleValue) {
+        rooted!(in(cx) let mut obj = js::JS_NewPlainObject(cx));
+        {
+            rooted!(in(cx) let mut n_type = jsval::UndefinedValue());
+            self.n_type.to_jsval(cx, n_type.handle_mut());
+            jsw::JS_SetProperty(cx, obj.handle(), b"type\0".as_ptr() as *const _, n_type.handle());
+        }
+        {
+            rooted!(in(cx) let mut n_mode = jsval::UndefinedValue());
+            self.n_mode.to_jsval(cx, n_mode.handle_mut());
+            jsw::JS_SetProperty(cx, obj.handle(), b"mode\0".as_ptr() as *const _, n_mode.handle());
+        }
+        jsw::JS_FreezeObject(cx, obj.handle());
+        rval.set(jsval::ObjectValue(obj.get()))
+    }
+}

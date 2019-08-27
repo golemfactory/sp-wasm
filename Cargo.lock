@@ -406,6 +406,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sp-wasm-hostfs"
+version = "0.1.0"
+dependencies = [
+ "libc 0.2.49 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mozjs 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "sp-wasm-memfs"
 version = "0.1.2"
 dependencies = [

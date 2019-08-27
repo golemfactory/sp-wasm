@@ -10,6 +10,7 @@ use std::sync::Mutex;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use std::fs::OpenOptions;
 
 lazy_static! {
     static ref VFS: Mutex<VirtualFS> = Mutex::new(VirtualFS::default());
@@ -44,12 +45,14 @@ impl Sandbox {
     }
 
     pub fn init(&mut self) -> Result<()> {
-        self.engine.evaluate_script(
+        let preload = std::fs::read_to_string("preload.js")?;
+
+        self.engine.evaluate_script(preload/*
             r#"
         Module['preRun'] = function() {
             FS.init();
         };
-        "#,
+        "#,*/
         )?;
         Ok(())
     }

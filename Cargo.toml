@@ -22,7 +22,8 @@ path = "src/main.rs"
 [workspace]
 members = [
     'sp-wasm-engine',
-    'sp-wasm-memfs'
+    'sp-wasm-memfs',
+    'sp-wasm-hostfs'
 ]
 
 [profile.release]
