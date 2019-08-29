@@ -3,18 +3,18 @@ use super::vfsdo::{NodeMode, NodeType};
 
 
 pub trait VfsVolume {
-    type INode : INode;
+    type INode : INode + Send + Sync;
 
     fn lookup(&self, path : &str) -> io::Result<Option<Self::INode>>;
 
 }
 
 pub trait INode {
-    type Stream : Stream;
+    type Stream : Stream + Send + Sync;
 
     fn mode(&self) -> (NodeType, NodeMode);
 
-    fn open(&self, mode : NodeMode) -> io::Result<Self::Stream>;
+    fn open(&self, mode : NodeMode, create_new : bool) -> io::Result<Self::Stream>;
 
     fn read_dir(&self) -> io::Result<Vec<String>>;
 

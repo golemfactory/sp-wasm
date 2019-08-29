@@ -1,10 +1,10 @@
 use mozjs::{
     rooted,
-    conversions::ToJSValConvertible,
+    conversions::{ToJSValConvertible, FromJSValConvertible, ConversionResult},
     jsapi as js,
     rust::wrappers as jsw,
     jsval,
-    rust::MutableHandleValue
+    rust::{MutableHandleValue, HandleValue}
 };
 use libc::c_char;
 
@@ -18,6 +18,8 @@ pub enum NodeMode {
     Ro, Rw, Wo
 }
 
+
+
 impl ToJSValConvertible for NodeMode {
     unsafe fn to_jsval(&self, cx: *mut js::JSContext, rval: MutableHandleValue) {
         match self {
@@ -25,6 +27,23 @@ impl ToJSValConvertible for NodeMode {
             NodeMode::Rw => "rw",
             NodeMode::Wo => "wo",
         }.to_jsval(cx, rval);
+    }
+}
+
+impl FromJSValConvertible for NodeMode {
+    type Config = ();
+
+    unsafe fn from_jsval(cx: *mut js::JSContext, val: HandleValue, option: Self::Config) -> Result<ConversionResult<Self>, ()> {
+        let s = match String::from_jsval(cx, val, ())? {
+            ConversionResult::Failure(f) => return Ok(ConversionResult::Failure(f)),
+            ConversionResult::Success(v) => v
+        };
+        Ok(match s.as_ref() {
+            "ro" => ConversionResult::Success(NodeMode::Ro),
+            "rw" => ConversionResult::Success(NodeMode::Rw),
+            "wo" => ConversionResult::Success(NodeMode::Wo),
+            _ => ConversionResult::Failure(format!("invalid mode: {}", s).into())
+        })
     }
 }
 
