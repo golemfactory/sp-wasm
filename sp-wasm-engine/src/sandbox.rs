@@ -4,7 +4,6 @@ pub mod vfs;
 use self::engine::*;
 use self::vfs::*;
 use super::Result;
-
 use std::sync::Mutex;
 use std::{io, path};
 

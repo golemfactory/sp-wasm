@@ -21,12 +21,15 @@ enum Command {
         /// Memory limit (0 - unlimited)
         #[structopt(long, short, default_value = "0")]
         memory: u64,
-        /// Bind mount a volume
-        #[structopt(long, short = "v")]
+        /// List of volumes to bind mount
+        #[structopt(long, short)]
         volume: Vec<String>,
+        /// Set working directory
         #[structopt(long = "workdir", short)]
         work_dir: Option<String>,
+        /// Wasm App binary path to run
         program: PathBuf,
+        /// Wasm App args
         args: Vec<String>,
     },
 }
@@ -59,9 +62,9 @@ fn main() -> failure::Fallible<()> {
             for vol in volume {
                 let mut it = vol.split(":").fuse();
                 match (it.next(), it.next(), it.next()) {
-                    (Some(src), Some(dst), None) => {
-                        sb.mount(src, dst, NodeMode::Rw).context("on bind mount")?
-                    }
+                    (Some(src), Some(dst), None) => sb
+                        .mount(src, dst, NodeMode::Rw)
+                        .context(format!("on bind mount: {}:{}", src, dst))?,
                     _ => return Err(failure::err_msg("invalid vol")),
                 }
             }
