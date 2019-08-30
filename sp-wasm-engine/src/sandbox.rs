@@ -11,6 +11,8 @@ use std::sync::Mutex;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::fs::OpenOptions;
+use sp_wasm_hostfs::vfsdo::NodeMode;
+use std::path::PathBuf;
 
 lazy_static! {
     static ref VFS: Mutex<VirtualFS> = Mutex::new(VirtualFS::default());
@@ -45,15 +47,9 @@ impl Sandbox {
     }
 
     pub fn init(&mut self) -> Result<()> {
-        let preload = std::fs::read_to_string("preload.js")?;
+        let preload = include_str!("preload.js");
 
-        self.engine.evaluate_script(preload/*
-            r#"
-        Module['preRun'] = function() {
-            FS.init();
-        };
-        "#,*/
-        )?;
+        self.engine.evaluate_script(preload)?;
         Ok(())
     }
 
@@ -160,6 +156,13 @@ impl Sandbox {
         }
 
         Ok(())
+    }
+
+    pub fn mount<'a>(&mut self, src : &str, des : &str) -> std::io::Result<()> {
+        let dest = sp_wasm_hostfs::dirfs::volume(PathBuf::from(src))?;
+        sp_wasm_hostfs::VfsManager::with(
+            move |vfs| vfs.bind(des, NodeMode::Rw,dest)
+        )
     }
 
     pub fn engine(&self) -> &Engine {

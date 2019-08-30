@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 sp-wasm-memfs = { path = "../sp-wasm-memfs"}
+sp-wasm-hostfs = { path = "../sp-wasm-hostfs"}
 libc = "0.2"
 mozjs = "0.10"
 log = "0.4"

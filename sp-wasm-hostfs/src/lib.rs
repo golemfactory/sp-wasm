@@ -1,6 +1,5 @@
 use std::io;
-use mozjs::rooted;
-use mozjs::conversions::{ToJSValConvertible, FromJSValConvertible, ConversionBehavior};
+use mozjs::{rooted, typedarray};
 use mozjs::rust::{MutableHandleValue, HandleValue};
 use mozjs::rust::wrappers as jsw;
 use mozjs::jsapi as js;
@@ -9,12 +8,15 @@ use crate::vfsdo::{VolumeInfo, NodeInfo, NodeMode};
 use crate::vfsops::{INode, Stream, VfsVolume};
 use lazy_static::lazy_static;
 use std::sync::RwLock;
+use crate::safepath::SafePath;
+use failure::_core::fmt::Display;
 
 pub mod vfsops;
 pub mod vfsdo;
 pub mod dirfs;
+mod safepath;
 
-type Fd = Box<dyn vfsops::Stream + 'static + Send + Sync>;
+type Fd = Box<dyn Stream + 'static + Send + Sync>;
 type ResolverDyn = Box<dyn VfsResolver + 'static + Send + Sync>;
 
 trait VfsResolver {
@@ -39,6 +41,20 @@ struct Resolver<T : vfsops::VfsVolume> {
     mode : vfsdo::NodeMode,
 }
 
+impl<T : vfsops::VfsVolume + 'static> Resolver<T> {
+
+    fn find_inode(&self, path :&str) -> io::Result<Option<T::INode>> {
+        SafePath::from(path).fold(self.volume.root().map(|v| Some(v)), |dir, part|
+            match dir {
+                Err(e) => Err(e),
+                Ok(Some(dir)) => dir.lookup(part?.as_ref()),
+                Ok(None) => Err(io::ErrorKind::NotFound.into())
+            }
+        )
+    }
+
+}
+
 impl<T : vfsops::VfsVolume + 'static> VfsResolver for Resolver<T> {
     fn info(&self, id: u32) -> VolumeInfo {
         VolumeInfo {
@@ -49,7 +65,7 @@ impl<T : vfsops::VfsVolume + 'static> VfsResolver for Resolver<T> {
     }
 
     fn lookup(&self, path: &str) -> io::Result<Option<NodeInfo>> {
-        let inode = self.volume.lookup(path)?;
+        let inode = self.find_inode(path)?;
 
         Ok(inode.as_ref().map( vfsops::INode::mode).map(|(n_type, n_mode)| NodeInfo {
             n_type, n_mode
@@ -57,16 +73,26 @@ impl<T : vfsops::VfsVolume + 'static> VfsResolver for Resolver<T> {
     }
 
     fn open(&self, path: &str, mode : NodeMode, create_new : bool) -> io::Result<Box<vfsops::Stream + Send + Sync>> {
-        self.volume.lookup(path)?
-            .ok_or_else(|| io::ErrorKind::NotFound.into())
-            .and_then(|ino| ino.open(mode, create_new))
-            .map(|s| -> Box<dyn vfsops::Stream + 'static + Send + Sync> {
-                Box::new(s)
-            })
+
+        let mut dir = self.volume.root()?;
+
+        for part in SafePath::from(path) {
+            let part = part?;
+            if part.is_last() {
+                return Ok(Box::new(dir.open(part.as_ref(), mode, create_new)?))
+            }
+            else if let Some(new_dir) = dir.lookup(part.as_ref())? {
+                dir = new_dir;
+            }
+            else {
+                return Err(io::ErrorKind::NotFound.into())
+            }
+        }
+        Err(io::ErrorKind::InvalidInput.into())
     }
 
     fn readdir(&self, path : &str) -> io::Result<Vec<String>> {
-        self.volume.lookup(path)?
+        self.find_inode(path)?
             .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?
             .read_dir()
     }
@@ -121,12 +147,11 @@ impl VfsManager {
             .find(|(_, fd)| fd.is_none())
             .ok_or_else(|| io::Error::from_raw_os_error(24 /*Too many open files*/))?;
 
-        let stream = self.volumes
+        let resolver = self.volumes
             .get(vol_id)
-            .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?
-            .open(path, mode, create_new)?;
+            .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
 
-        *f = Some(stream);
+        *f = Some(resolver.open(path, mode, create_new)?);
         Ok(idx as u32)
     }
 
@@ -167,7 +192,7 @@ impl VfsManager {
         Ok(())
     }
 
-    pub fn with<F, T>(action : F) -> T where F : FnOnce(&mut Self) -> T {
+    pub fn with<'a, F : 'a, T : 'a>(action : F) -> T where F : FnOnce(&mut Self) -> T {
         let mut r = VFS.write().unwrap();
         action(std::ops::DerefMut::deref_mut(&mut r))
     }
@@ -183,7 +208,6 @@ mod js_hostfs {
     use super::*;
     use mozjs::conversions::{ToJSValConvertible, FromJSValConvertible, ConversionBehavior, ConversionResult};
     use std::ffi::CString;
-    use mozjs::rust::HandleObject;
 
     macro_rules! fromjs {
         {
@@ -218,7 +242,7 @@ mod js_hostfs {
             match $e {
                 Ok(v) => v,
                 Err(e) => {
-                    eprintln!("e={}", e);
+                    eprintln!("e[{}:{}]={}", file!(), line!(), e);
                     let msg = CString::new(format!("{}", e)).unwrap();
                     js::JS_ReportErrorASCII($cx, msg.as_ptr() as *const _);
                     return false;
@@ -303,7 +327,7 @@ mod js_hostfs {
             let fd : u32 = args[0] & ConversionBehavior::EnforceRange;
             let offset : u32 = args[2] & ConversionBehavior::EnforceRange;
             let len : u32 = args[3] & ConversionBehavior::EnforceRange;
-            let position : u64 = args[2] & ConversionBehavior::EnforceRange;
+            let position : u64 = args[4] & ConversionBehavior::EnforceRange;
         }
         let buf_handle = HandleValue::from_raw(args.get(1));
         if !buf_handle.get().is_object() {
@@ -312,16 +336,19 @@ mod js_hostfs {
         }
 
         let obj = buf_handle.get().to_object();
-        use mozjs::typedarray::ArrayBuffer;
 
         // TODO: throw err
-        let mut t =  mozjs::typedarray::TypedArray::<mozjs::typedarray::Uint8, *mut js::JSObject>::from(obj).unwrap();
+        /*typedarray!(in(cx) let mut buffer: ArrayBufferView = obj);
+        let buf = buffer.as_mut_slice();*/
+        let mut t =  mozjs::typedarray::TypedArray::<mozjs::typedarray::ArrayBufferViewU8, *mut js::JSObject>::from(obj).unwrap();
 
-        let buf_slice = t.as_mut_slice();
+        let lx = t.len();
+        let buf_slice = t.as_mut_slice(); //std::slice::from_raw_parts_mut(t.as_mut_slice().as_mut_ptr() as *mut u8, lx);
 
         let to = (offset+len) as usize;
         let from  = offset as usize;
         let ret = try_js!(in(cx) VFS.write().unwrap().read(fd, &mut buf_slice[from..to], position));
+        //eprintln!("got {} from {}", ret, position);
         retjs! {
             in(cx) args[rval] = ret
         }
@@ -334,7 +361,7 @@ mod js_hostfs {
             let fd : u32 = args[0] & ConversionBehavior::EnforceRange;
             let offset : u32 = args[2] & ConversionBehavior::EnforceRange;
             let len : u32 = args[3] & ConversionBehavior::EnforceRange;
-            let position : u64 = args[2] & ConversionBehavior::EnforceRange;
+            let position : u64 = args[4] & ConversionBehavior::EnforceRange;
         }
         let buf_handle = HandleValue::from_raw(args.get(1));
         if !buf_handle.get().is_object() {
@@ -343,15 +370,15 @@ mod js_hostfs {
         }
 
         let obj = buf_handle.get().to_object();
-        use mozjs::typedarray::ArrayBuffer;
 
         // TODO: throw err
-        let mut t =  mozjs::typedarray::TypedArray::<mozjs::typedarray::Uint8, *mut js::JSObject>::from(obj).unwrap();
+        let t =  mozjs::typedarray::TypedArray::<mozjs::typedarray::ArrayBufferViewU8, *mut js::JSObject>::from(obj).unwrap();
 
         let buf_slice = t.as_slice();
 
         let to = (offset+len) as usize;
         let from  = offset as usize;
+        //eprintln!("from={}, to={} @len={} @position={} view={}", from, to, to-from, position, buf_slice.len());
         let ret = try_js!(in(cx) VFS.write().unwrap().write(fd, &buf_slice[from..to], position));
         retjs! {
             in(cx) args[rval] = ret

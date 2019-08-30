@@ -3,6 +3,7 @@
 use sp_wasm_engine::prelude::*;
 use std::path::PathBuf;
 use structopt::StructOpt;
+use failure::ResultExt;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -21,7 +22,7 @@ enum Command {
         #[structopt(long, short, default_value = "0")]
         memory: u64,
         /// Bind mount a volume
-        #[structopt(long, short)]
+        #[structopt(long, short="v")]
         volume: Vec<String>,
         #[structopt(long = "workdir", short)]
         work_dir: Option<String>,
@@ -48,12 +49,20 @@ fn main() -> failure::Fallible<()> {
             program,
             args,
         } => {
+            //eprintln!("program={}, args={:?}", program.display(), args);
             let program_js = program.with_extension("js");
             let program_wasm = program.with_extension("wasm");
 
             let mut sb = Sandbox::new()?.set_exec_args(args)?;
 
             sb.init()?;
+            for vol in volume {
+                let mut it = vol.split(":").fuse();
+                match (it.next(), it.next(), it.next()) {
+                    (Some(src), Some(dst), None) => sb.mount(src, dst).context("on bind mount")?,
+                    _ => return Err(failure::err_msg("invalid vol"))
+                }
+            }
 
             sb.run(program_js.to_str().unwrap(), program_wasm.to_str().unwrap())?;
 

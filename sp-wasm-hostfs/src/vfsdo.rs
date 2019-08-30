@@ -6,7 +6,7 @@ use mozjs::{
     jsval,
     rust::{MutableHandleValue, HandleValue}
 };
-use libc::c_char;
+
 
 #[derive(Clone, Copy)]
 pub enum NodeType {
@@ -18,7 +18,19 @@ pub enum NodeMode {
     Ro, Rw, Wo
 }
 
+impl std::ops::BitAnd for NodeMode {
+    type Output = Option<NodeMode>;
 
+    fn bitand(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (NodeMode::Rw, _) => Some(NodeMode::Rw),
+            (_, NodeMode::Rw) => Some(NodeMode::Rw),
+            (NodeMode::Ro, NodeMode::Ro) => Some(NodeMode::Ro),
+            (NodeMode::Wo, NodeMode::Wo) => Some(NodeMode::Wo),
+            (_, _) => None,
+        }
+    }
+}
 
 impl ToJSValConvertible for NodeMode {
     unsafe fn to_jsval(&self, cx: *mut js::JSContext, rval: MutableHandleValue) {
@@ -33,7 +45,7 @@ impl ToJSValConvertible for NodeMode {
 impl FromJSValConvertible for NodeMode {
     type Config = ();
 
-    unsafe fn from_jsval(cx: *mut js::JSContext, val: HandleValue, option: Self::Config) -> Result<ConversionResult<Self>, ()> {
+    unsafe fn from_jsval(cx: *mut js::JSContext, val: HandleValue, _: Self::Config) -> Result<ConversionResult<Self>, ()> {
         let s = match String::from_jsval(cx, val, ())? {
             ConversionResult::Failure(f) => return Ok(ConversionResult::Failure(f)),
             ConversionResult::Success(v) => v

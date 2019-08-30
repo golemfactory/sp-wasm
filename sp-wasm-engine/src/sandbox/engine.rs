@@ -2,6 +2,7 @@ use super::VFS;
 use crate::Result;
 use core::slice;
 use mozjs::glue::SetBuildId;
+use mozjs::rust::wrappers as jsw;
 use mozjs::jsapi::CompartmentOptions;
 use mozjs::jsapi::ContextOptionsRef;
 use mozjs::jsapi::JSAutoCompartment;
@@ -208,6 +209,11 @@ impl Engine {
                 }
             };",
         )?;
+
+        use sp_wasm_hostfs::build_js_api;
+        rooted!(in(ctx) let mut hostfs_api = UndefinedValue());
+        build_js_api(ctx, hostfs_api.handle_mut());
+        jsw::JS_SetProperty(ctx, gl, b"hostfs\0".as_ptr() as *const _, hostfs_api.handle());
 
         Ok(Self {
             _engine: engine,

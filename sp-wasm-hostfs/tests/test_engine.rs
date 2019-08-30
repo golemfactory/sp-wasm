@@ -2,7 +2,6 @@ use mozjs::rust::{Runtime, JSEngine, SIMPLE_GLOBAL_CLASS};
 use std::ptr;
 use mozjs::{rooted, jsapi};
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::wrappers::*;
 use std::ffi::{CStr};
 use libc::c_char;
 use mozjs::rust::jsapi_wrapped as js;
@@ -24,7 +23,7 @@ fn test_engine() {
         let _ac = jsapi::JSAutoCompartment::new(cx, global.get());
         {
             rooted!(in(cx) let mut env = jsapi::JS_NewPlainObject(cx));
-            let function = js::JS_DefineFunction(cx, env.handle(), b"puts\0".as_ptr() as *const c_char,
+            let _ = js::JS_DefineFunction(cx, env.handle(), b"puts\0".as_ptr() as *const c_char,
                                              Some(puts), 1, 0);
 
             rooted!(in(cx) let mut envv = mozjs::jsval::ObjectValue(env.get()));
@@ -46,8 +45,8 @@ fn test_engine() {
         }
 
         VfsManager::with(|manager| {
-            manager.bind("/in", NodeMode::Ro, dirfs::volume("/home/reqc/prj/lrn/wasm/test2"))?;
-            manager.bind("/out", NodeMode::Rw, dirfs::volume("/tmp"))
+            manager.bind("/in", NodeMode::Ro, dirfs::volume("/home/prekucki/workspace/wasm/test-ls")?)?;
+            manager.bind("/out", NodeMode::Rw, dirfs::volume("/tmp")?)
         }).unwrap();
 
         let javascript = r#"
