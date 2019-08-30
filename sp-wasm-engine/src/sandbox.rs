@@ -1,18 +1,19 @@
-pub mod engine;
-pub mod vfs;
-
-use self::engine::*;
-use self::vfs::*;
-use super::Result;
-
+use std::fs::OpenOptions;
 use std::path;
 use std::sync::Mutex;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use std::fs::OpenOptions;
+
 use sp_wasm_hostfs::vfsdo::NodeMode;
-use std::path::PathBuf;
+
+use super::Result;
+
+use self::engine::*;
+use self::vfs::*;
+
+pub mod engine;
+pub mod vfs;
 
 lazy_static! {
     static ref VFS: Mutex<VirtualFS> = Mutex::new(VirtualFS::default());
@@ -159,7 +160,7 @@ impl Sandbox {
     }
 
     pub fn mount<'a>(&mut self, src : &str, des : &str) -> std::io::Result<()> {
-        let dest = sp_wasm_hostfs::dirfs::volume(PathBuf::from(src))?;
+        let dest = sp_wasm_hostfs::dirfs::volume(path::PathBuf::from(src))?;
         sp_wasm_hostfs::VfsManager::with(
             move |vfs| vfs.bind(des, NodeMode::Rw,dest)
         )
