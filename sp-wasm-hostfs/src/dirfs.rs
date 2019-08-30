@@ -105,7 +105,7 @@ impl Stream for File {
 }
 
 
-pub fn volume<'a, P : Into<PathBuf> + 'a>(base_path : P) -> io::Result<impl VfsVolume + 'static>  {
+pub fn volume(base_path : impl Into<PathBuf>) -> io::Result<impl VfsVolume + 'static>  {
     let lookup_path = base_path.into();
     let m = lookup_path.metadata()?;
     let parent = None;

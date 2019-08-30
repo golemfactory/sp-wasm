@@ -5,14 +5,15 @@ use self::engine::*;
 use self::vfs::*;
 use super::Result;
 
-use std::path;
+use std::{path, io};
 use std::sync::Mutex;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::fs::OpenOptions;
 use sp_wasm_hostfs::vfsdo::NodeMode;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
+use sp_wasm_hostfs::vfsops::VfsVolume;
 
 lazy_static! {
     static ref VFS: Mutex<VirtualFS> = Mutex::new(VirtualFS::default());
@@ -158,11 +159,19 @@ impl Sandbox {
         Ok(())
     }
 
-    pub fn mount<'a>(&mut self, src : &str, des : &str) -> std::io::Result<()> {
-        let dest = sp_wasm_hostfs::dirfs::volume(PathBuf::from(src))?;
-        sp_wasm_hostfs::VfsManager::with(
-            move |vfs| vfs.bind(des, NodeMode::Rw,dest)
-        )
+    fn mount_vol(&mut self, path : impl Into<String>, mode : NodeMode, v : impl VfsVolume + 'static + Send + Sync) -> io::Result<()> {
+        let path = path.into();
+        sp_wasm_hostfs::VfsManager::with(move |vfs| vfs.bind(path, mode,v))
+    }
+
+    pub fn mount(&mut self, src : impl Into<PathBuf>, des : &str) -> std::io::Result<()> {
+        let path = src.into();
+        if path.is_file() {
+            self.mount_vol(des, NodeMode::Ro, sp_wasm_hostfs::zipfs::volume(path)?)
+        }
+        else {
+            self.mount_vol(des, NodeMode::Ro, sp_wasm_hostfs::dirfs::volume(path)?)
+        }
     }
 
     pub fn engine(&self) -> &Engine {

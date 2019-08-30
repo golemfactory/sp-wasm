@@ -5,13 +5,17 @@ authors = ["Jakub Konka <jakub.konka@golem.network>"]
 edition = "2018"
 
 [dependencies]
-libc = "0.2"
 mozjs = "0.10"
 log = "0.4"
 lazy_static = "1.3"
 path-clean = "0.1"
 failure = "0.1"
 
+[dependencies.zip]
+version = "0.5.3"
+optional = true
 
 [features]
+default = ['with-zipfs']
+with-zipfs = ['zip']
 debugmozjs = ["mozjs/debugmozjs"]

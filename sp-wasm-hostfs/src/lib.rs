@@ -14,6 +14,10 @@ use failure::_core::fmt::Display;
 pub mod vfsops;
 pub mod vfsdo;
 pub mod dirfs;
+
+#[cfg(feature="with-zipfs")]
+pub mod zipfs;
+
 mod safepath;
 
 type Fd = Box<dyn Stream + 'static + Send + Sync>;
