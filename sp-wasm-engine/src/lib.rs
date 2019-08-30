@@ -15,4 +15,5 @@ pub mod prelude {
     pub use super::sandbox::engine::Engine;
     pub use super::sandbox::vfs::VirtualFS;
     pub use super::sandbox::Sandbox;
+    pub use sp_wasm_hostfs::vfsdo::NodeMode;
 }

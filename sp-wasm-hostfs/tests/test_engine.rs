@@ -1,12 +1,12 @@
-use mozjs::rust::{Runtime, JSEngine, SIMPLE_GLOBAL_CLASS};
-use std::ptr;
-use mozjs::{rooted, jsapi};
-use mozjs::jsval::UndefinedValue;
-use std::ffi::{CStr};
-use mozjs::rust::jsapi_wrapped as js;
-use sp_wasm_hostfs::vfsdo::{VolumeInfo, NodeMode};
 use mozjs::conversions::ToJSValConvertible;
-use sp_wasm_hostfs::{build_js_api, VfsManager, dirfs};
+use mozjs::jsval::UndefinedValue;
+use mozjs::rust::jsapi_wrapped as js;
+use mozjs::rust::{JSEngine, Runtime, SIMPLE_GLOBAL_CLASS};
+use mozjs::{jsapi, rooted};
+use sp_wasm_hostfs::vfsdo::{NodeMode, VolumeInfo};
+use sp_wasm_hostfs::{build_js_api, dirfs, VfsManager};
+use std::ffi::CStr;
+use std::ptr;
 
 #[test]
 fn test_engine() {
@@ -16,14 +16,26 @@ fn test_engine() {
     let h_option = jsapi::OnNewGlobalHookOption::FireOnNewGlobalHook;
     let c_option = jsapi::CompartmentOptions::default();
     unsafe {
-        let global = jsapi::JS_NewGlobalObject(cx, &SIMPLE_GLOBAL_CLASS, ptr::null_mut(), h_option, &c_option);
+        let global = jsapi::JS_NewGlobalObject(
+            cx,
+            &SIMPLE_GLOBAL_CLASS,
+            ptr::null_mut(),
+            h_option,
+            &c_option,
+        );
         rooted!(in(cx) let global_root = global);
         let global = global_root.handle();
         let _ac = jsapi::JSAutoCompartment::new(cx, global.get());
         {
             rooted!(in(cx) let mut env = jsapi::JS_NewPlainObject(cx));
-            let _ = js::JS_DefineFunction(cx, env.handle(), b"puts\0".as_ptr() as *const _,
-                                             Some(puts), 1, 0);
+            let _ = js::JS_DefineFunction(
+                cx,
+                env.handle(),
+                b"puts\0".as_ptr() as *const _,
+                Some(puts),
+                1,
+                0,
+            );
 
             rooted!(in(cx) let mut envv = mozjs::jsval::ObjectValue(env.get()));
 
@@ -31,22 +43,32 @@ fn test_engine() {
 
             rooted!(in(cx) let mut hostfs_api = mozjs::jsval::UndefinedValue());
             build_js_api(cx, hostfs_api.handle_mut());
-            js::JS_SetProperty(cx, global, b"hostfs\0".as_ptr() as *const _, hostfs_api.handle());
-
+            js::JS_SetProperty(
+                cx,
+                global,
+                b"hostfs\0".as_ptr() as *const _,
+                hostfs_api.handle(),
+            );
 
             rooted!(in(cx) let mut vi = mozjs::jsval::UndefinedValue());
             VolumeInfo {
                 id: 0,
                 mount_point: "/tmp".to_string(),
-                mode: NodeMode::Ro
-            }.to_jsval(cx, vi.handle_mut());
+                mode: NodeMode::Ro,
+            }
+            .to_jsval(cx, vi.handle_mut());
             js::JS_SetProperty(cx, global, b"vi\0".as_ptr() as *const _, vi.handle());
         }
 
         VfsManager::with(|manager| {
-            manager.bind("/in", NodeMode::Ro, dirfs::volume("/home/prekucki/workspace/wasm/test-ls")?)?;
+            manager.bind(
+                "/in",
+                NodeMode::Ro,
+                dirfs::volume("/home/prekucki/workspace/wasm/test-ls")?,
+            )?;
             manager.bind("/out", NodeMode::Rw, dirfs::volume("/tmp")?)
-        }).unwrap();
+        })
+        .unwrap();
 
         let javascript = r#"
 
@@ -101,17 +123,24 @@ fn test_engine() {
             }
         "#;
         rooted!(in(cx) let mut rval = UndefinedValue());
-        let _ = runtime.evaluate_script(global, javascript, "test.js", 0, rval.handle_mut()).unwrap();
-
+        let _ = runtime
+            .evaluate_script(global, javascript, "test.js", 0, rval.handle_mut())
+            .unwrap();
     }
-
 }
 
-unsafe extern "C" fn puts(context: *mut jsapi::JSContext, argc: u32, vp: *mut jsapi::Value) -> bool {
+unsafe extern "C" fn puts(
+    context: *mut jsapi::JSContext,
+    argc: u32,
+    vp: *mut jsapi::Value,
+) -> bool {
     let args = jsapi::CallArgs::from_vp(vp, argc);
 
     if args.argc_ != 1 {
-        jsapi::JS_ReportErrorASCII(context, b"puts() requires exactly 1 argument\0".as_ptr() as *const _);
+        jsapi::JS_ReportErrorASCII(
+            context,
+            b"puts() requires exactly 1 argument\0".as_ptr() as *const _,
+        );
         return false;
     }
     let arg = mozjs::rust::Handle::from_raw(args.get(0));

@@ -1,9 +1,9 @@
 #![warn(clippy::all)]
 
+use failure::ResultExt;
 use sp_wasm_engine::prelude::*;
 use std::path::PathBuf;
 use structopt::StructOpt;
-use failure::ResultExt;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -22,7 +22,7 @@ enum Command {
         #[structopt(long, short, default_value = "0")]
         memory: u64,
         /// Bind mount a volume
-        #[structopt(long, short="v")]
+        #[structopt(long, short = "v")]
         volume: Vec<String>,
         #[structopt(long = "workdir", short)]
         work_dir: Option<String>,
@@ -59,8 +59,10 @@ fn main() -> failure::Fallible<()> {
             for vol in volume {
                 let mut it = vol.split(":").fuse();
                 match (it.next(), it.next(), it.next()) {
-                    (Some(src), Some(dst), None) => sb.mount(src, dst).context("on bind mount")?,
-                    _ => return Err(failure::err_msg("invalid vol"))
+                    (Some(src), Some(dst), None) => {
+                        sb.mount(src, dst, NodeMode::Rw).context("on bind mount")?
+                    }
+                    _ => return Err(failure::err_msg("invalid vol")),
                 }
             }
 

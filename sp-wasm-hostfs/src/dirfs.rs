@@ -1,18 +1,18 @@
-use std::{io, fs};
-use std::path::{PathBuf, Path};
 use super::vfsops::*;
 use crate::vfsdo::*;
-use std::fs::{OpenOptions, File};
+use std::fs::{File, OpenOptions};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::{fs, io};
 
 struct DirFs {
-    root : Arc<DirFsInode>
+    root: Arc<DirFsInode>,
 }
 
 struct DirFsInode {
-    parent : Option<Arc<DirFsInode>>,
-    lookup_path : PathBuf,
-    m : fs::Metadata
+    parent: Option<Arc<DirFsInode>>,
+    lookup_path: PathBuf,
+    m: fs::Metadata,
 }
 
 impl VfsVolume for DirFs {
@@ -29,17 +29,23 @@ impl INode for Arc<DirFsInode> {
     fn lookup(&self, name: &str) -> io::Result<Option<Self>> {
         let node = match name {
             "." => Some(self.clone()),
-            ".." => Some(self.parent.as_ref().map(Clone::clone).unwrap_or_else(|| self.clone())),
+            ".." => Some(
+                self.parent
+                    .as_ref()
+                    .map(Clone::clone)
+                    .unwrap_or_else(|| self.clone()),
+            ),
             _ => {
                 let lookup_path = self.lookup_path.join(name);
                 if lookup_path.exists() {
                     let m = lookup_path.metadata()?;
 
                     Some(Arc::new(DirFsInode {
-                        lookup_path, m, parent: Some(self.clone())
+                        lookup_path,
+                        m,
+                        parent: Some(self.clone()),
                     }))
-                }
-                else {
+                } else {
                     None
                 }
             }
@@ -51,27 +57,27 @@ impl INode for Arc<DirFsInode> {
         let p = self.m.permissions();
         let mode = if p.readonly() {
             NodeMode::Ro
-        }
-        else {
+        } else {
             NodeMode::Rw
         };
         let node_type = if self.m.is_dir() {
             NodeType::Dir
-        }
-        else {
+        } else {
             NodeType::File
         };
 
         (node_type, mode)
     }
 
-    fn open(&self, name : &str, mode: NodeMode, create_new :bool) -> io::Result<Self::Stream> {
+    fn open(&self, name: &str, mode: NodeMode, create_new: bool) -> io::Result<Self::Stream> {
         let mut opts = OpenOptions::new();
         match mode {
             NodeMode::Ro => opts.read(true),
             NodeMode::Rw => opts.read(true).write(true),
-            NodeMode::Wo => opts.write(true)
-        }.create(create_new).open(&self.lookup_path.join(name))
+            NodeMode::Wo => opts.write(true),
+        }
+        .create(create_new)
+        .open(&self.lookup_path.join(name))
     }
 
     fn read_dir(&self) -> io::Result<Vec<String>> {
@@ -99,20 +105,21 @@ impl Stream for File {
         Ok(len as u64)
     }
 
-    fn close(self : Box<Self>) -> io::Result<()> {
+    fn close(self: Box<Self>) -> io::Result<()> {
         Ok(())
     }
 }
 
-
-pub fn volume(base_path : impl Into<PathBuf>) -> io::Result<impl VfsVolume + 'static>  {
+pub fn volume(base_path: impl Into<PathBuf>) -> io::Result<impl VfsVolume + 'static> {
     let lookup_path = base_path.into();
     let m = lookup_path.metadata()?;
     let parent = None;
 
     Ok(DirFs {
-       root:  Arc::new(DirFsInode {
-           lookup_path, m, parent
-       })
+        root: Arc::new(DirFsInode {
+            lookup_path,
+            m,
+            parent,
+        }),
     })
 }

@@ -1,4 +1,3 @@
-
 HOSTFS = {
 
     mount(opts) {
@@ -60,8 +59,7 @@ HOSTFS.node_ops = {
             //print(`${parent.volid}:${parent.tag}/${name} ${JSON.stringify(node_info)}`);
 
             return HOSTFS.createNode(parent, name, mcode, 0);
-        }
-        catch (e) {
+        } catch (e) {
             throw new FS.ErrnoError(2);
         }
     },
@@ -86,8 +84,7 @@ HOSTFS.stream_ops = {
         let position = offset;
         if (whence == 1) {
             position += stream.position;
-        }
-        else if (whence == 2) {
+        } else if (whence == 2) {
             if (FS.isFile(stream.node.mode)) {
                 position += stream.node.usedBytes;
             }
@@ -108,7 +105,7 @@ HOSTFS.stream_ops = {
 
         const MODES = ['ro', 'wo', 'rw'];
 
-        let host_fd = hostfs.open(volid, tag, MODES[flags&3], (flags&64) == 64);
+        let host_fd = hostfs.open(volid, tag, MODES[flags & 3], (flags & 64) == 64);
 
         stream.host_fd = host_fd;
 
@@ -127,8 +124,7 @@ HOSTFS.stream_ops = {
             }*/
             //print(`read: ${len} bytes`);
             return len;
-        }
-        catch (e) {
+        } catch (e) {
             print('err');
             return 0;
         }
@@ -146,8 +142,7 @@ HOSTFS.stream_ops = {
             }*/
             //print(`write: ${len}`);
             return len;
-        }
-        catch (e) {
+        } catch (e) {
             print('err');
             return 0;
         }
@@ -200,10 +195,32 @@ Module['preRun'] = function () {
     if (hostfs) {
         for (const vol of hostfs.volumes()) {
             const {id, mount_point, mode} = vol;
+
+            if (mount_point === '@') {
+                // Load overlay
+                const root_node = HOSTFS.mount({opts: {volid: id}});
+
+                //print(`root node: ${root_node} ${FS.root.contents['dev'].name}`);
+
+                for (const name of root_node.node_ops.readdir(root_node)) {
+                    const f = root_node.node_ops.lookup(root_node, name);
+                    const n = FS.createNode(FS.root, name, f.mode, 0);
+
+                    n.node_ops =f.node_ops;
+                    n.stream_ops = f.stream_ops;
+                    n.volid = f.volid;
+                    n.tag = f.tag;
+                    FS.root.contents[name] = f;
+                    // print(`elem: ${name}`);
+                }
+
+
+                continue;
+            }
+
             try {
                 FS.createPath('', mount_point, true, true);
-            }
-            catch (e) {
+            } catch (e) {
                 // none
             }
             FS.mount(HOSTFS, {volid: id}, mount_point);
