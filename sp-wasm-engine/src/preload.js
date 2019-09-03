@@ -246,11 +246,8 @@ Module['preRun'] = function () {
     }
 
     if ('work_dir' in Module) {
-        print(`work dir: ${Module['work_dir']}`);
         FS.chdir(Module['work_dir']);
     }
-    else {
-        print('now');
-    }
+
 };
 
