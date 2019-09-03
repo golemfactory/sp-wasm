@@ -46,6 +46,12 @@ impl Sandbox {
         Ok(self)
     }
 
+    pub fn work_dir(self, dir : &str) -> Result<Self> {
+        let js = format!("Module['work_dir'] = {};", serde_json::to_string(dir)?);
+        self.engine.evaluate_script(&js)?;
+        Ok(self)
+    }
+
     pub fn init(&mut self) -> Result<()> {
         let preload = include_str!("preload.js");
 

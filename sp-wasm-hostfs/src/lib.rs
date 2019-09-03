@@ -36,6 +36,8 @@ trait VfsResolver {
     ) -> io::Result<Box<dyn vfsops::Stream + Send + Sync>>;
 
     fn readdir(&self, path: &str) -> io::Result<Vec<String>>;
+
+    fn mkdir(&self, path : &str) -> io::Result<NodeInfo>;
 }
 
 pub struct VfsManager {
@@ -76,6 +78,31 @@ impl<T: vfsops::VfsVolume + 'static> VfsResolver for Resolver<T> {
             .map(vfsops::INode::mode)
             .map(|(n_type, n_mode)| NodeInfo { n_type, n_mode }))
     }
+
+    fn mkdir(&self, path: &str) -> io::Result<NodeInfo> {
+        match self.mode {
+            NodeMode::Ro => return Err(io::ErrorKind::PermissionDenied.into()),
+            _ => ()
+        };
+
+        let mut node = self.volume.root()?;
+
+        for part in SafePath::from(path) {
+            let part = part?;
+            if part.is_last() {
+                let (n_type, n_mode) = node.mkdir(part.as_ref())?.mode();
+                return Ok(NodeInfo { n_type, n_mode });
+            }
+            if let Some(sub_node) = node.lookup(part.as_ref())? {
+                node = sub_node;
+            }
+            else {
+                return Err(io::ErrorKind::NotFound.into())
+            }
+        }
+        unreachable!()
+    }
+
 
     fn open(
         &self,
@@ -133,6 +160,14 @@ impl VfsManager {
             .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?
             .lookup(path)
     }
+
+    pub fn mkdir(&self, vol_id: usize, path: &str) -> io::Result<NodeInfo> {
+        self.volumes
+            .get(vol_id)
+            .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?
+            .mkdir(path)
+    }
+
 
     pub fn readdir(&self, vol_id: usize, path: &str) -> io::Result<Vec<String>> {
         self.volumes
@@ -330,6 +365,24 @@ mod js_hostfs {
         }
     }
 
+    pub(super) unsafe extern "C" fn mkdir(
+        cx: *mut js::JSContext,
+        argc: u32,
+        vp: *mut js::Value,
+    ) -> bool {
+        let args = js::CallArgs::from_vp(vp, argc);
+        fromjs! {
+            in(cx)
+            let vol_id : u32 = args[0] & ConversionBehavior::EnforceRange;
+            let path : String = args[1] & ();
+        }
+        let node = try_js!(in(cx) VFS.write().unwrap().mkdir(vol_id as usize, &path));
+        retjs! {
+            in(cx) args[rval] = node
+        }
+    }
+
+
     //open(vol_id, path, mode, create_new) -> int
     pub(super) unsafe extern "C" fn open(
         cx: *mut js::JSContext,
@@ -473,6 +526,15 @@ pub unsafe fn build_js_api(cx: *mut js::JSContext, mut rval: MutableHandleValue)
         2,
         0,
     );
+    let _ = jsw::JS_DefineFunction(
+        cx,
+        hostfs_api.handle(),
+        b"mkdir\0".as_ptr() as *const _,
+        Some(js_hostfs::mkdir),
+        2,
+        0,
+    );
+
     let _ = jsw::JS_DefineFunction(
         cx,
         hostfs_api.handle(),

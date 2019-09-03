@@ -80,6 +80,17 @@ impl INode for Arc<DirFsInode> {
         .open(&self.lookup_path.join(name))
     }
 
+    fn mkdir(&mut self, name: &str) -> io::Result<Self> {
+        let lookup_path = self.lookup_path.join(name);
+        fs::create_dir(&lookup_path)?;
+        let m = lookup_path.metadata()?;
+        Ok(Arc::new(DirFsInode {
+            lookup_path,
+            m,
+            parent: Some(self.clone()),
+        }))
+    }
+
     fn read_dir(&self) -> io::Result<Vec<String>> {
         let mut out = Vec::new();
         for ent in fs::read_dir(&self.lookup_path)? {
@@ -90,6 +101,7 @@ impl INode for Arc<DirFsInode> {
         }
         Ok(out)
     }
+
 }
 
 impl Stream for File {

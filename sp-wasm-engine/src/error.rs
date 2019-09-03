@@ -23,6 +23,9 @@ pub enum Error {
 
     #[fail(display = "{}", _0)]
     Engine(#[cause] EngineError),
+
+    #[fail(display = "{}", _0)]
+    Json(#[cause] serde_json::Error)
 }
 
 impl From<StripPrefixError> for Error {
@@ -54,6 +57,13 @@ impl From<EngineError> for Error {
         Error::Engine(err)
     }
 }
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Error {
+        Error::Json(err)
+    }
+}
+
 
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {

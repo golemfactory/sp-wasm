@@ -65,6 +65,24 @@ HOSTFS.node_ops = {
     },
 
     mknod: (parent, name, mode, dev) => {
+        //print(`mknode ${name} ${mode} ${dev}`);
+        if (FS.isDir(mode)) {
+            const node_info = hostfs.mkdir(parent.volid, `${parent.tag}/${name}`);
+            let mcode = 0;
+
+            if (node_info.type === 'f') {
+                mcode |= 32768;
+            } else if (node_info.type === 'd') {
+                mcode |= 16384 | 0o111;
+            }
+
+            if (node_info.mode == 'ro') {
+                mcode |= 0o444;
+            } else if (node_info.mode == 'rw') {
+                mcode |= 0o666;
+            }
+            return HOSTFS.createNode(parent, name, mcode, 0);
+        }
         return HOSTFS.createNode(parent, name, mode, dev);
     },
 
@@ -225,6 +243,14 @@ Module['preRun'] = function () {
             }
             FS.mount(HOSTFS, {volid: id}, mount_point);
         }
+    }
+
+    if ('work_dir' in Module) {
+        print(`work dir: ${Module['work_dir']}`);
+        FS.chdir(Module['work_dir']);
+    }
+    else {
+        print('now');
     }
 };
 

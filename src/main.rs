@@ -58,6 +58,10 @@ fn main() -> failure::Fallible<()> {
 
             let mut sb = Sandbox::new()?.set_exec_args(args)?;
 
+            if let Some(work_dir) = work_dir {
+                sb = sb.work_dir(&work_dir)?;
+            }
+
             sb.init()?;
             for vol in volume {
                 let mut it = vol.split(":").fuse();
