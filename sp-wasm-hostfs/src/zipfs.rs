@@ -136,7 +136,7 @@ impl INode for ZipFsNode {
     }
 
     fn open(&self, name: &str, mode: NodeMode, create_new: bool) -> io::Result<Self::Stream> {
-        eprintln!("try open: {}", name);
+        //eprintln!("try open: {}", name);
         match mode {
             NodeMode::Ro => (),
             _ => return Err(io::ErrorKind::PermissionDenied.into()),
