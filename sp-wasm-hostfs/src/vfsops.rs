@@ -14,7 +14,7 @@ pub trait INode: Sized + Send + Sync {
 
     fn open(&self, name: &str, mode: NodeMode, create_new: bool) -> io::Result<Self::Stream>;
 
-    fn mkdir(&mut self, name : &str) -> io::Result<Self>;
+    fn mkdir(&mut self, name: &str) -> io::Result<Self>;
 
     fn lookup(&self, name: &str) -> io::Result<Option<Self>>;
 

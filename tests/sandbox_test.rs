@@ -43,10 +43,7 @@ fn sandbox_impl() -> Result<(), String> {
     Sandbox::new()
         .and_then(|sandbox| sandbox.set_exec_args(vec!["test"]))
         .and_then(|sandbox| sandbox.load_input_files(input_dir.to_str().unwrap()))
-        .and_then(|sandbox| sandbox.run(js.to_str().unwrap(), wasm.to_str().unwrap()))
-        .and_then(|sandbox| {
-            sandbox.save_output_files(output_dir.to_str().unwrap(), vec!["ccc.txt", "c/ddd.txt"])
-        })
+        .and_then(|sandbox| sandbox.run(js.as_path(), wasm.as_path()))
         .map_err(|err| err.to_string())?;
 
     let mut file = File::open(output_dir.join("ccc.txt")).map_err(|err| err.to_string())?;

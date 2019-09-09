@@ -101,7 +101,6 @@ impl INode for Arc<DirFsInode> {
         }
         Ok(out)
     }
-
 }
 
 impl Stream for File {

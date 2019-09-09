@@ -1,4 +1,5 @@
 use super::sandbox::engine::error::Error as EngineError;
+use failure::_core::convert::Infallible;
 use sp_wasm_memfs::error::Error as MemFSError;
 use std::io::Error as IoError;
 use std::path::StripPrefixError;
@@ -25,7 +26,7 @@ pub enum Error {
     Engine(#[cause] EngineError),
 
     #[fail(display = "{}", _0)]
-    Json(#[cause] serde_json::Error)
+    Json(#[cause] serde_json::Error),
 }
 
 impl From<StripPrefixError> for Error {
@@ -64,6 +65,11 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+impl From<Infallible> for Error {
+    fn from(_: Infallible) -> Self {
+        unreachable!()
+    }
+}
 
 impl PartialEq for Error {
     fn eq(&self, other: &Error) -> bool {

@@ -37,7 +37,7 @@ trait VfsResolver {
 
     fn readdir(&self, path: &str) -> io::Result<Vec<String>>;
 
-    fn mkdir(&self, path : &str) -> io::Result<NodeInfo>;
+    fn mkdir(&self, path: &str) -> io::Result<NodeInfo>;
 }
 
 pub struct VfsManager {
@@ -82,7 +82,7 @@ impl<T: vfsops::VfsVolume + 'static> VfsResolver for Resolver<T> {
     fn mkdir(&self, path: &str) -> io::Result<NodeInfo> {
         match self.mode {
             NodeMode::Ro => return Err(io::ErrorKind::PermissionDenied.into()),
-            _ => ()
+            _ => (),
         };
 
         let mut node = self.volume.root()?;
@@ -95,14 +95,12 @@ impl<T: vfsops::VfsVolume + 'static> VfsResolver for Resolver<T> {
             }
             if let Some(sub_node) = node.lookup(part.as_ref())? {
                 node = sub_node;
-            }
-            else {
-                return Err(io::ErrorKind::NotFound.into())
+            } else {
+                return Err(io::ErrorKind::NotFound.into());
             }
         }
         unreachable!()
     }
-
 
     fn open(
         &self,
@@ -167,7 +165,6 @@ impl VfsManager {
             .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?
             .mkdir(path)
     }
-
 
     pub fn readdir(&self, vol_id: usize, path: &str) -> io::Result<Vec<String>> {
         self.volumes
@@ -381,7 +378,6 @@ mod js_hostfs {
             in(cx) args[rval] = node
         }
     }
-
 
     //open(vol_id, path, mode, create_new) -> int
     pub(super) unsafe extern "C" fn open(

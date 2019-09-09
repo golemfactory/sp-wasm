@@ -155,7 +155,6 @@ impl INode for ZipFsNode {
         Err(io::ErrorKind::PermissionDenied.into())
     }
 
-
     fn lookup(&self, name: &str) -> io::Result<Option<Self>> {
         if let Some(node) = self.find_node(name)? {
             let node_ref = node.clone();

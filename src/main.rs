@@ -2,6 +2,7 @@
 
 use failure::ResultExt;
 use sp_wasm_engine::prelude::*;
+use std::fs::File;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -73,7 +74,7 @@ fn main() -> failure::Fallible<()> {
                 }
             }
 
-            sb.run(program_js.to_str().unwrap(), program_wasm.to_str().unwrap())?;
+            sb.run(program_js.as_path(), program_wasm.as_path())?;
 
             /*.and_then(|sandbox| sandbox.load_input_files(input_dir))
             .and_then(|sandbox| sandbox.run(wasm_js, wasm_bin))
