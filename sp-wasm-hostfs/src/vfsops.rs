@@ -10,7 +10,7 @@ pub trait VfsVolume {
 pub trait INode: Sized + Send + Sync {
     type Stream: Stream + Send + Sync;
 
-    fn mode(&self) -> (NodeType, NodeMode);
+    fn mode(&self) -> (NodeType, NodeMode, u64);
 
     fn open(&self, name: &str, mode: NodeMode, create_new: bool) -> io::Result<Self::Stream>;
 

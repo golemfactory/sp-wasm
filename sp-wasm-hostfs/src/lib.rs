@@ -76,7 +76,11 @@ impl<T: vfsops::VfsVolume + 'static> VfsResolver for Resolver<T> {
         Ok(inode
             .as_ref()
             .map(vfsops::INode::mode)
-            .map(|(n_type, n_mode)| NodeInfo { n_type, n_mode }))
+            .map(|(n_type, n_mode, size)| NodeInfo {
+                n_type,
+                n_mode,
+                size,
+            }))
     }
 
     fn mkdir(&self, path: &str) -> io::Result<NodeInfo> {
@@ -90,8 +94,12 @@ impl<T: vfsops::VfsVolume + 'static> VfsResolver for Resolver<T> {
         for part in SafePath::from(path) {
             let part = part?;
             if part.is_last() {
-                let (n_type, n_mode) = node.mkdir(part.as_ref())?.mode();
-                return Ok(NodeInfo { n_type, n_mode });
+                let (n_type, n_mode, size) = node.mkdir(part.as_ref())?.mode();
+                return Ok(NodeInfo {
+                    n_type,
+                    n_mode,
+                    size,
+                });
             }
             if let Some(sub_node) = node.lookup(part.as_ref())? {
                 node = sub_node;
@@ -252,6 +260,11 @@ impl VfsManager {
     {
         let mut r = VFS.write().unwrap();
         action(std::ops::DerefMut::deref_mut(&mut r))
+    }
+
+    pub fn reset() {
+        let mut vfs_ref = VFS.write().unwrap();
+        *vfs_ref = VfsManager::new();
     }
 }
 
@@ -497,6 +510,7 @@ mod js_hostfs {
 }
 
 pub unsafe fn build_js_api(cx: *mut js::JSContext, mut rval: MutableHandleValue) -> bool {
+    VfsManager::reset();
     rooted!(in(cx) let hostfs_api = js::JS_NewPlainObject(cx));
     let _ = jsw::JS_DefineFunction(
         cx,

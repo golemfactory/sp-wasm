@@ -109,6 +109,7 @@ impl ToJSValConvertible for VolumeInfo {
 pub struct NodeInfo {
     pub n_type: NodeType,
     pub n_mode: NodeMode,
+    pub size: u64,
 }
 
 impl ToJSValConvertible for NodeInfo {
@@ -134,6 +135,17 @@ impl ToJSValConvertible for NodeInfo {
                 n_mode.handle(),
             );
         }
+        {
+            rooted!(in(cx) let mut n_size = jsval::UndefinedValue());
+            self.size.to_jsval(cx, n_size.handle_mut());
+            jsw::JS_SetProperty(
+                cx,
+                obj.handle(),
+                b"size\0".as_ptr() as *const _,
+                n_size.handle(),
+            );
+        }
+
         jsw::JS_FreezeObject(cx, obj.handle());
         rval.set(jsval::ObjectValue(obj.get()))
     }

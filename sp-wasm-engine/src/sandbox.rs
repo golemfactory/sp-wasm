@@ -8,6 +8,7 @@ use super::Result;
 use std::sync::Mutex;
 use std::{io, path};
 
+pub use self::engine::EngineRef;
 use crate::sandbox::load::Bytes;
 use failure::_core::convert::TryInto;
 use itertools::Itertools;
@@ -27,6 +28,16 @@ pub struct Sandbox {
 }
 
 impl Sandbox {
+    pub fn init_ejs() -> Result<EngineRef> {
+        Engine::init()
+    }
+
+    pub fn new_on_engine(engine: EngineRef) -> Result<Self> {
+        let engine = Engine::new_on_engine(engine)?;
+
+        Ok(Self { engine })
+    }
+
     pub fn new() -> Result<Self> {
         let engine = Engine::new()?;
 

@@ -29,6 +29,8 @@ use std::os::raw::c_uint;
 use std::sync::Arc;
 use std::{ffi, ptr};
 
+pub type EngineRef = Arc<JSEngine>;
+
 const STACK_QUOTA: usize = 128 * 8 * 1024;
 const SYSTEM_CODE_BUFFER: usize = 10 * 1024;
 const TRUSTED_SCRIPT_BUFFER: usize = 8 * 12800;
@@ -125,9 +127,17 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Result<Self> {
-        log::info!("Initializing SpiderMonkey engine");
-        let engine = JSEngine::init().map_err(error::Error::from)?;
+        let engine = Self::init()?;
 
+        Self::new_on_engine(engine)
+    }
+
+    pub fn init() -> Result<Arc<JSEngine>> {
+        log::info!("Initializing SpiderMonkey engine");
+        Ok(JSEngine::init().map_err(error::Error::from)?)
+    }
+
+    pub fn new_on_engine(engine: Arc<JSEngine>) -> Result<Self> {
         unsafe {
             let cx = new_root_context();
             let engine = Self::create_with(engine, cx)?;
@@ -137,7 +147,7 @@ impl Engine {
 
     unsafe fn create_with(engine: Arc<JSEngine>, ctx: *mut JSContext) -> Result<Self> {
         if ctx.is_null() {
-            return Err(error::Error::SMInternal.into());
+            return Err(error::Error::SMInternal("context is null".to_string()).into());
         }
 
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
@@ -388,8 +398,8 @@ pub mod error {
         #[fail(display = "couldn't convert Uint8Array to Vec<u8>")]
         Uint8ArrayToVecConversion,
 
-        #[fail(display = "SpiderMonkey internal error")]
-        SMInternal,
+        #[fail(display = "SpiderMonkey internal error: {}", _0)]
+        SMInternal(String),
 
         #[fail(display = "{}", _0)]
         SMJS(#[cause] JSError),
@@ -400,7 +410,7 @@ pub mod error {
             match (self, other) {
                 (&Error::SliceToUint8ArrayConversion, &Error::SliceToUint8ArrayConversion) => true,
                 (&Error::Uint8ArrayToVecConversion, &Error::Uint8ArrayToVecConversion) => true,
-                (&Error::SMInternal, &Error::SMInternal) => true,
+                (&Error::SMInternal(_), &Error::SMInternal(_)) => true,
                 (&Error::SMJS(ref left), &Error::SMJS(ref right)) => left == right,
                 (_, _) => false,
             }
@@ -408,8 +418,8 @@ pub mod error {
     }
 
     impl From<JSEngineError> for Error {
-        fn from(_err: JSEngineError) -> Self {
-            Error::SMInternal
+        fn from(err: JSEngineError) -> Self {
+            Error::SMInternal(format!("{:?}", err))
         }
     }
 

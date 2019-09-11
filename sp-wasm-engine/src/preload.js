@@ -30,12 +30,39 @@ HOSTFS = {
     }
 };
 HOSTFS.node_ops = {
-    getattr: () => {
-        //print("getattr");
+    getattr: (node) => {
+        //print(`getattr ${node.tag} ${node.volid}`);
+        const m = hostfs.lookup(node.volid, node.tag);
+        //print(`m=${JSON.stringify(m)}`);
+        let attr = {};
+        attr.dev = 1;
+        attr.ino = node.id;
+        attr.mode = node.mode;
+        attr.nlink = 1;
+        attr.uid = 0;
+        attr.gid = 0;
+        attr.rdev = node.rdev;
+        attr.size = m.size;
+        attr.atime = new Date(0);
+        attr.mtime = new Date(0);
+        attr.ctime = new Date(0);
+        attr.blksize = 4096;
+        attr.blocks = Math.ceil(attr.size / attr.blksize);
+
+
+        return attr;
     },
 
     setattr: () => {
         //print("setattr")
+    },
+
+    dir_stat: () => {
+        print('dir stat');
+    },
+
+    file_stat: () => {
+        print('file stat');
     },
 
     lookup: (parent, name) => {
@@ -182,7 +209,8 @@ HOSTFS.ops_table = {
             unlink: HOSTFS.node_ops.unlink,
             rmdir: HOSTFS.node_ops.rmdir,
             readdir: HOSTFS.node_ops.readdir,
-            symlink: HOSTFS.node_ops.symlink
+            symlink: HOSTFS.node_ops.symlink,
+            stat: HOSTFS.node_ops.dir_stat,
         },
         stream: {
             llseek: HOSTFS.stream_ops.llseek,
@@ -192,7 +220,8 @@ HOSTFS.ops_table = {
     file: {
         node: {
             getattr: HOSTFS.node_ops.getattr,
-            setattr: HOSTFS.node_ops.setattr
+            setattr: HOSTFS.node_ops.setattr,
+            stat: HOSTFS.node_ops.file_stat,
         },
         stream: {
             llseek: HOSTFS.stream_ops.llseek,

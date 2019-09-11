@@ -53,7 +53,7 @@ impl INode for Arc<DirFsInode> {
         Ok(node)
     }
 
-    fn mode(&self) -> (NodeType, NodeMode) {
+    fn mode(&self) -> (NodeType, NodeMode, u64) {
         let p = self.m.permissions();
         let mode = if p.readonly() {
             NodeMode::Ro
@@ -66,7 +66,7 @@ impl INode for Arc<DirFsInode> {
             NodeType::File
         };
 
-        (node_type, mode)
+        (node_type, mode, self.m.len())
     }
 
     fn open(&self, name: &str, mode: NodeMode, create_new: bool) -> io::Result<Self::Stream> {

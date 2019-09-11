@@ -26,7 +26,13 @@ impl ZipFs {
             let path: Rc<Path> = file.sanitized_name().into();
             paths.push(path.clone());
             if file.is_file() {
-                files.insert(path, ZipFsNodeRef::File { idx: i });
+                files.insert(
+                    path,
+                    ZipFsNodeRef::File {
+                        idx: i,
+                        size: file.size(),
+                    },
+                );
             } else if file.is_dir() {
                 files.insert(
                     path,
@@ -97,6 +103,7 @@ impl ZipFsInner {
 enum ZipFsNodeRef {
     File {
         idx: usize,
+        size: u64,
     },
     Dir {
         idx: usize,
@@ -128,10 +135,10 @@ impl ZipFsNode {
 impl INode for ZipFsNode {
     type Stream = ZipFsStream;
 
-    fn mode(&self) -> (NodeType, NodeMode) {
+    fn mode(&self) -> (NodeType, NodeMode, u64) {
         match self.node_ref.as_ref() {
-            ZipFsNodeRef::File { .. } => (NodeType::File, NodeMode::Ro),
-            _ => (NodeType::Dir, NodeMode::Ro),
+            ZipFsNodeRef::File { size, .. } => (NodeType::File, NodeMode::Ro, *size),
+            _ => (NodeType::Dir, NodeMode::Ro, 0),
         }
     }
 
@@ -143,7 +150,7 @@ impl INode for ZipFsNode {
         };
 
         let file_index = match self.find_node(name)?.map(AsRef::as_ref) {
-            Some(ZipFsNodeRef::File { idx }) => *idx,
+            Some(ZipFsNodeRef::File { idx, .. }) => *idx,
             _ => return Err(io::ErrorKind::InvalidInput.into()),
         };
 
@@ -207,7 +214,7 @@ mod test {
         let mut n_files = 0;
         while !stack.is_empty() {
             let (path, inode) = stack.pop().unwrap();
-            let (n_type, mode) = inode.mode();
+            let (n_type, mode, _) = inode.mode();
             eprintln!(":: {}", path);
             match n_type {
                 NodeType::Dir => {
