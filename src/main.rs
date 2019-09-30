@@ -5,7 +5,7 @@ use sp_wasm_engine::prelude::*;
 
 fn main() {
     let args = App::new("wasm-sandbox")
-        .version("0.4.0")
+        .version("0.4.1")
         .author("Golem RnD Team <contact@golem.network>")
         .about("Standalone SpiderMonkey instance that can be used to run Emscripten generated Wasm according to the Golem calling convention.")
         .arg(
@@ -70,5 +70,8 @@ fn main() {
         .and_then(|sandbox| sandbox.load_input_files(input_dir))
         .and_then(|sandbox| sandbox.run(wasm_js, wasm_bin))
         .and_then(|sandbox| sandbox.save_output_files(output_dir, output_files.iter()))
-        .unwrap_or_else(|err| eprintln!("{}", err));
+        .unwrap_or_else(|err| {
+            eprintln!("{}", err);
+            std::process::exit(1)
+        });
 }
