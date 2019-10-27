@@ -83,7 +83,7 @@ jobs:
         args: --release
     - name: Prepare archive
       run: |
-        tar -czvf sp-wasm.tar.gz target/release/wasm_sandbox
+        tar -czvf sp-wasm.tar.gz target/release/wasm-sandbox
     - name: Upload asset
       uses: actions/upload-artifact@v1
       with:

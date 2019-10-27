@@ -1,8 +1,8 @@
 # SpiderMonkey-based WebAssembly Sandbox
-[![Build Status]][azure]
+[![Build Status]][build]
 
-[Build Status]: https://dev.azure.com/kubkon/sp-wasm/_apis/build/status/golemfactory.sp-wasm?branchName=master
-[azure]: https://dev.azure.com/kubkon/sp-wasm/_build/latest?definitionId=1&branchName=master
+[Build Status]: https://github.com/golemfactory/sp-wasm/workflows/Continuous%20Integration/badge.svg
+[build]: https://github.com/golemfactory/sp-wasm/actions
 
 A WebAssembly sandbox using standalone SpiderMonkey engine. For `v8` version,
 see [golemfactory/v8-wasm](https://github.com/golemfactory/v8-wasm).
