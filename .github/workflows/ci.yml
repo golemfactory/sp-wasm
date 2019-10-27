@@ -1,0 +1,114 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build_debug:
+    name: Build debug
+    runs-on: ${{ matrix.os }}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macOS]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+        components: rustfmt
+    - name: Install preqrequisites (ubuntu)
+      if: matrix.os == 'ubuntu'
+      run: |
+        sudo apt-get install -y --no-install-recommends autoconf2.13
+    - name: Install preqrequisites (macOS)
+      if: matrix.os == 'macOS'
+      run: |
+        brew install yasm autoconf@2.13
+    - name: Check formatting
+      uses: actions-rs/cargo@v1
+      with:
+        command: fmt
+        args: --all -- --check
+    - name: Build
+      env:
+        SHELL: ${{ '/bin/bash' }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        
+  build_release:
+    name: Build release
+    runs-on: ${{ matrix.os }}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macOS]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+    - name: Install preqrequisites (ubuntu)
+      if: matrix.os == 'ubuntu'
+      run: |
+        sudo apt-get install -y --no-install-recommends autoconf2.13
+    - name: Install preqrequisites (macOS)
+      if: matrix.os == 'macOS'
+      run: |
+        brew install yasm autoconf@2.13
+    - name: Build
+      env:
+        SHELL: ${{ '/bin/bash' }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release
+        
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macOS]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+    - name: Install preqrequisites (ubuntu)
+      if: matrix.os == 'ubuntu'
+      run: |
+        sudo apt-get install -y --no-install-recommends autoconf2.13
+    - name: Install preqrequisites (macOS)
+      if: matrix.os == 'macOS'
+      run: |
+        brew install yasm autoconf@2.13
+    - name: Run tests
+      env:
+        SHELL: ${{ '/bin/bash' }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all
