@@ -41,9 +41,11 @@ jobs:
         command: fmt
         args: --all -- --check
     - name: Build
-      shell: bash
-      run: |
-        cargo build
+      env:
+        SHELL: ${{ '/bin/bash' }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
         
   build_release:
     name: Build release
@@ -71,9 +73,12 @@ jobs:
       run: |
         brew install yasm autoconf@2.13
     - name: Build
-      shell: bash
-      run: |
-        cargo build --release
+      env:
+        SHELL: ${{ '/bin/bash' }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release
         
   test:
     name: Test
@@ -101,6 +106,9 @@ jobs:
       run: |
         brew install yasm autoconf@2.13
     - name: Run tests
-      shell: bash
-      run: |
-        cargo test --all
+      env:
+        SHELL: ${{ '/bin/bash' }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all
