@@ -16,8 +16,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu, macOS]
-    env:
-      shell: ${{ '/bin/bash' }}
 
     steps:
     - name: Checkout
@@ -43,9 +41,9 @@ jobs:
         command: fmt
         args: --all -- --check
     - name: Build
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
+      shell: bash
+      run: |
+        cargo build
         
   build_release:
     name: Build release
@@ -54,8 +52,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu, macOS]
-    env:
-      shell: ${{ '/bin/bash' }}
 
     steps:
     - name: Checkout
@@ -75,10 +71,9 @@ jobs:
       run: |
         brew install yasm autoconf@2.13
     - name: Build
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --release
+      shell: bash
+      run: |
+        cargo build --release
         
   test:
     name: Test
@@ -87,8 +82,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu, macOS]
-    env:
-      shell: ${{ '/bin/bash' }}
 
     steps:
     - name: Checkout
@@ -108,7 +101,6 @@ jobs:
       run: |
         brew install yasm autoconf@2.13
     - name: Run tests
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --all
+      shell: bash
+      run: |
+        cargo test --all
