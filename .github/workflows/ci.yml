@@ -10,11 +10,14 @@ on:
 
 jobs:
   build_debug:
+    name: Build debug
     runs-on: ${{ matrix.os }}-latest
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu, macOS]
+    env:
+      shell: ${{ '/bin/bash' }}
 
     steps:
     - name: Checkout
@@ -39,17 +42,20 @@ jobs:
       with:
         command: fmt
         args: --all -- --check
-    - name: Build debug
+    - name: Build
       uses: actions-rs/cargo@v1
       with:
         command: build
         
   build_release:
+    name: Build release
     runs-on: ${{ matrix.os }}-latest
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu, macOS]
+    env:
+      shell: ${{ '/bin/bash' }}
 
     steps:
     - name: Checkout
@@ -68,18 +74,21 @@ jobs:
       if: matrix.os == 'macOS'
       run: |
         brew install yasm autoconf@2.13
-    - name: Build release
+    - name: Build
       uses: actions-rs/cargo@v1
       with:
         command: build
         args: --release
         
   test:
+    name: Test
     runs-on: ${{ matrix.os }}-latest
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu, macOS]
+    env:
+      shell: ${{ '/bin/bash' }}
 
     steps:
     - name: Checkout
