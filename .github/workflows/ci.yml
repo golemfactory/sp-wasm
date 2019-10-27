@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - master
+    tags:
+      - v*
   pull_request:
     branches:
       - master
@@ -49,9 +51,9 @@ jobs:
         
   build_release:
     name: Build release
+    needs: [build_debug, test]
     runs-on: ${{ matrix.os }}-latest
     strategy:
-      fail-fast: false
       matrix:
         os: [ubuntu, macOS]
 
@@ -79,6 +81,14 @@ jobs:
       with:
         command: build
         args: --release
+    - name: Prepare archive
+      run: |
+        tar -czvf sp-wasm.tar.gz target/release/wasm_sandbox
+    - name: Upload asset
+      uses: actions/upload-artifact@v1
+      with:
+        name: ${{ matrix.os }}-asset
+        path: sp-wasm.tar.gz
         
   test:
     name: Test
@@ -112,3 +122,52 @@ jobs:
       with:
         command: test
         args: --all
+        
+  publish:
+    name: Publish release
+    needs: [build_release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macOS-latest
+    
+    steps:
+    - name: Prepare tag
+      id: tag_name
+      uses: olegtarasov/get-tag@v1
+      with:
+        tagname: ${{ steps.tag_name.outputs.tag }}
+    - name: Create release
+      id: create_release
+      uses: actions/create-release@v1.0.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with: 
+        tag_name: ${{ steps.tag_name.outputs.tag }}
+        release_name: sp-wasm-${{ steps.tag_name.outputs.tag }}
+        draft: true
+        prerelease: false
+    - name: Download asset (linux)
+      uses: actions/download-artifact@v1
+      with:
+        name: ubuntu-asset
+    - name: Download asset (macOS)
+      uses: actions/download-artifact@v1
+      with:
+        name: macOS-asset
+    - name: Upload artifact (linux)
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ubuntu-asset/sp-wasm.tar.gz
+        asset_name: sp-wasm-${{ steps.tag_name.outputs.tag }}-linux.tar.gz
+        asset_content_type: application/gzip
+    - name: Upload artifact (macOS)
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: macOS-asset/sp-wasm.tar.gz
+        asset_name: sp-wasm-${{ steps.tag_name.outputs.tag }}-macos.tar.gz
+        asset_content_type: application/gzip
