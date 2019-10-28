@@ -61,7 +61,7 @@ impl VirtualFS {
         &mut self,
         source_path: P1,
         dest_path: P2,
-        cb: &mut FnMut(&path::Path, &path::Path),
+        cb: &mut dyn FnMut(&path::Path, &path::Path),
     ) -> Result<()>
     where
         P1: AsRef<path::Path>,
