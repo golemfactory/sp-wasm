@@ -1,20 +1,21 @@
 mod common;
 
-use common::create_workspace;
+use common::*;
 use sp_wasm_engine::prelude::*;
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::PathBuf;
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
 
 fn vfs_impl() -> Result<(), String> {
-    // create dir structure in /tmp
-    let test_dir = create_workspace("vfs")?;
-    let mut dir = PathBuf::from(&test_dir);
+    let test_dir = create_workspace()?;
+    let mut dir = PathBuf::from(test_dir.path());
     dir.push("a.txt");
     let mut f = File::create(dir).map_err(|err| err.to_string())?;
     f.write_all(b"aaa").map_err(|err| err.to_string())?;
 
-    let mut dir = PathBuf::from(&test_dir);
+    let mut dir = PathBuf::from(test_dir.path());
     dir.push("sub/");
     fs::create_dir(dir.as_path()).map_err(|err| err.to_string())?;
     dir.push("b.txt");
@@ -23,7 +24,7 @@ fn vfs_impl() -> Result<(), String> {
 
     // map into VFS
     let mut vfs = VirtualFS::new();
-    vfs.map_path(&test_dir, "/", &mut |_, _| {})
+    vfs.map_path(test_dir.path(), "/", &mut |_, _| {})
         .map_err(|err| err.to_string())?;
 
     let contents = vfs.read_file("/a.txt").map_err(|err| err.to_string())?;

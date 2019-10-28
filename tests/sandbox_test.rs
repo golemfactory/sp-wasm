@@ -1,10 +1,12 @@
 mod common;
 
-use common::create_workspace;
+use common::*;
 use sp_wasm_engine::prelude::*;
-use std::fs::{self, File};
-use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::{
+    fs::{self, File},
+    io::{Read, Write},
+    path::PathBuf,
+};
 
 const INPUT_PART1: &'static [u8] = include_bytes!("assets/aaa.txt");
 const INPUT_PART2: &'static [u8] = include_bytes!("assets/bbb.txt");
@@ -12,9 +14,8 @@ const EM_JS: &'static [u8] = include_bytes!("assets/test.js");
 const EM_WASM: &'static [u8] = include_bytes!("assets/test.wasm");
 
 fn sandbox_impl() -> Result<(), String> {
-    let test_dir = create_workspace("sandbox")?;
-
-    let mut input_dir = PathBuf::from(&test_dir);
+    let test_dir = create_workspace()?;
+    let mut input_dir = PathBuf::from(test_dir.path());
     input_dir.push("in/");
     fs::create_dir(input_dir.as_path()).map_err(|err| err.to_string())?;
     let mut f = File::create(input_dir.join("aaa.txt")).map_err(|err| err.to_string())?;
@@ -26,17 +27,17 @@ fn sandbox_impl() -> Result<(), String> {
     let mut f = File::create(input_subdir.join("bbb.txt")).map_err(|err| err.to_string())?;
     f.write_all(INPUT_PART2).map_err(|err| err.to_string())?;
 
-    let mut js = PathBuf::from(&test_dir);
+    let mut js = PathBuf::from(test_dir.path());
     js.push("test.js");
     let mut f = File::create(js.as_path()).map_err(|err| err.to_string())?;
     f.write_all(EM_JS).map_err(|err| err.to_string())?;
 
-    let mut wasm = PathBuf::from(&test_dir);
+    let mut wasm = PathBuf::from(test_dir.path());
     wasm.push("test.wasm");
     let mut f = File::create(wasm.as_path()).map_err(|err| err.to_string())?;
     f.write_all(EM_WASM).map_err(|err| err.to_string())?;
 
-    let mut output_dir = PathBuf::from(&test_dir);
+    let mut output_dir = PathBuf::from(test_dir.path());
     output_dir.push("out/");
     fs::create_dir(output_dir.as_path()).map_err(|err| err.to_string())?;
 
