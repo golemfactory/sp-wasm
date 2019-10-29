@@ -18,7 +18,7 @@ use mozjs::jsapi::SetBuildIdOp;
 use mozjs::jsapi::Value;
 use mozjs::jsval::ObjectValue;
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::{Handle, JSEngine, Runtime, ToString, SIMPLE_GLOBAL_CLASS};
+use mozjs::rust::{Handle, JSEngine, Runtime, ToString, ToUint64, SIMPLE_GLOBAL_CLASS};
 use mozjs::typedarray::{ArrayBuffer, CreateWith};
 use std::ptr;
 
@@ -76,6 +76,15 @@ impl Engine {
         JS_DefineFunction(
             ctx,
             gl.into(),
+            b"usleep\0".as_ptr() as *const libc::c_char,
+            Some(Self::usleep),
+            0,
+            0,
+        );
+
+        JS_DefineFunction(
+            ctx,
+            gl.into(),
             b"readFile\0".as_ptr() as *const libc::c_char,
             Some(Self::read_file),
             0,
@@ -95,7 +104,10 @@ impl Engine {
         Self::eval(
             &runtime,
             global,
-            "var Module = { 'printErr': print, 'print': print };",
+            "var Module = {
+                'printErr': print,
+                'print': print,
+            };",
         )?;
 
         // init /dev/random emulation
@@ -113,6 +125,17 @@ impl Engine {
                         array[i] = (golem_randEmu() * 256) | 0
                 }
             };",
+        )?;
+
+        // make time ops fully deterministic
+        Self::eval(
+            &runtime,
+            global,
+            "
+              var date = new Date(0);
+              var timestamp = date.getTime();
+              Date.now = function() { return timestamp; }
+             ",
         )?;
 
         Ok(Self { runtime, global })
@@ -246,6 +269,39 @@ impl Engine {
         };
 
         println!("{}", message);
+
+        args.rval().set(UndefinedValue());
+        true
+    }
+
+    unsafe extern "C" fn usleep(ctx: *mut JSContext, argc: u32, vp: *mut Value) -> bool {
+        use std::{thread::sleep, time::Duration};
+
+        let args = CallArgs::from_vp(vp, argc);
+
+        if args.argc_ != 1 {
+            JS_ReportErrorASCII(
+                ctx,
+                b"usleep(useconds) requires exactly 1 argument\0".as_ptr() as *const libc::c_char,
+            );
+            return false;
+        }
+
+        let arg = Handle::from_raw(args.get(0));
+        let useconds = match ToUint64(ctx, arg) {
+            Ok(useconds) => useconds,
+            Err(()) => {
+                JS_ReportErrorASCII(
+                    ctx,
+                    b"couldn't extract value from input arg 'useconds'\0".as_ptr()
+                        as *const libc::c_char,
+                );
+                return false;
+            }
+        };
+
+        // sleep
+        sleep(Duration::from_micros(useconds));
 
         args.rval().set(UndefinedValue());
         true

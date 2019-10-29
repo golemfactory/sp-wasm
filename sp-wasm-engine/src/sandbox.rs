@@ -49,8 +49,10 @@ impl Sandbox {
     {
         log::info!("Loading input files at {}", input_path.as_ref());
 
+        // Include our version of '_usleep' function
         let mut js = "
         Module['preRun'] = function() {
+            _usleep = usleep;
         "
         .to_string();
 
