@@ -134,7 +134,6 @@ impl Engine {
             "
               var date = new Date(0);
               var timestamp = date.getTime();
-              Date = function() { return date; }
               Date.now = function() { return timestamp; }
              ",
         )?;
