@@ -246,19 +246,27 @@ Module['preRun'] = function () {
             if (mount_point === '@') {
                 // Load overlay
                 const root_node = HOSTFS.mount({opts: {volid: id}});
-
-                //print(`root node: ${root_node} ${FS.root.contents['dev'].name}`);
-
+                
                 for (const name of root_node.node_ops.readdir(root_node)) {
-                    const f = root_node.node_ops.lookup(root_node, name);
-                    const n = FS.createNode(FS.root, name, f.mode, 0);
 
-                    n.node_ops =f.node_ops;
-                    n.stream_ops = f.stream_ops;
-                    n.volid = f.volid;
-                    n.tag = f.tag;
-                    FS.root.contents[name] = f;
-                    // print(`elem: ${name}`);
+                    if (['dev', 'tmp', 'proc'].includes(name)) {
+                        continue;
+                    }
+
+                    try {
+                        const f = root_node.node_ops.lookup(root_node, name);
+                        const n = FS.createNode(FS.root, name, f.mode, 0);
+
+                        n.node_ops = f.node_ops;
+                        n.stream_ops = f.stream_ops;
+                        n.volid = f.volid;
+                        n.tag = f.tag;
+                        FS.root.contents[name] = f;
+
+                    }
+                    catch (e) {
+                        // ignore bad paths
+                    }
                 }
 
 
