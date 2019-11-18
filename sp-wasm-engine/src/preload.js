@@ -248,8 +248,10 @@ Module['preRun'] = function () {
                 const root_node = HOSTFS.mount({opts: {volid: id}});
                 
                 for (const name of root_node.node_ops.readdir(root_node)) {
-
                     if (['dev', 'tmp', 'proc'].includes(name)) {
+                        continue;
+                    }
+                    if (name.startsWith(".")) {
                         continue;
                     }
 
