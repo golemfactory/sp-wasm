@@ -1,27 +1,17 @@
 use std::io;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[fail(display = "file '{}' already exists", _0)]
+    #[error("file '{0}' already exists")]
     AlreadyExists(String),
-
-    #[fail(display = "file '{}' not found", _0)]
+    #[error("file '{0}' not found")]
     NotFound(String),
-
-    #[fail(display = "invalid path: '{}'", _0)]
+    #[error("invalid path: '{0}'")]
     InvalidPath(String),
-
-    #[fail(display = "file is root")]
+    #[error("file is root")]
     IsRoot,
-
-    #[fail(display = "{}", _0)]
-    Io(#[cause] io::Error),
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
-        Error::Io(err)
-    }
+    #[error("{0}")]
+    Io(#[from] io::Error),
 }
 
 impl PartialEq for Error {

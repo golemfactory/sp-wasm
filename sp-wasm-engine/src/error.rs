@@ -4,55 +4,20 @@ use std::io::Error as IoError;
 use std::path::StripPrefixError;
 use std::string::FromUtf8Error;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[fail(display = "invalid path: {}", _0)]
+    #[error("invalid path: {0}")]
     InvalidPath(String),
-
-    #[fail(display = "{}", _0)]
-    StripPrefix(#[cause] StripPrefixError),
-
-    #[fail(display = "{}", _0)]
-    FromUtf8(#[cause] FromUtf8Error),
-
-    #[fail(display = "{}", _0)]
-    MemFS(#[cause] MemFSError),
-
-    #[fail(display = "{}", _0)]
-    Io(#[cause] IoError),
-
-    #[fail(display = "{}", _0)]
-    Engine(#[cause] EngineError),
-}
-
-impl From<StripPrefixError> for Error {
-    fn from(err: StripPrefixError) -> Error {
-        Error::StripPrefix(err)
-    }
-}
-
-impl From<FromUtf8Error> for Error {
-    fn from(err: FromUtf8Error) -> Error {
-        Error::FromUtf8(err)
-    }
-}
-
-impl From<MemFSError> for Error {
-    fn from(err: MemFSError) -> Error {
-        Error::MemFS(err)
-    }
-}
-
-impl From<IoError> for Error {
-    fn from(err: IoError) -> Error {
-        Error::Io(err)
-    }
-}
-
-impl From<EngineError> for Error {
-    fn from(err: EngineError) -> Error {
-        Error::Engine(err)
-    }
+    #[error("{0}")]
+    StripPrefix(#[from] StripPrefixError),
+    #[error("{0}")]
+    FromUtf8(#[from] FromUtf8Error),
+    #[error("{0}")]
+    MemFS(#[from] MemFSError),
+    #[error("{0}")]
+    Io(#[from] IoError),
+    #[error("{0}")]
+    Engine(#[from] EngineError),
 }
 
 impl PartialEq for Error {
