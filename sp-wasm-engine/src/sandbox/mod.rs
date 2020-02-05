@@ -5,7 +5,7 @@ use self::engine::*;
 use self::vfs::*;
 use super::Result;
 
-use std::path;
+use std::path::{self, Path};
 use std::sync::Mutex;
 
 use itertools::Itertools;
@@ -45,9 +45,9 @@ impl Sandbox {
 
     pub fn load_input_files<S>(self, input_path: S) -> Result<Self>
     where
-        S: AsRef<str>,
+        S: AsRef<Path>,
     {
-        log::info!("Loading input files at {}", input_path.as_ref());
+        log::info!("Loading input files at {}", input_path.as_ref().display());
 
         // Include our version of '_usleep' function
         let mut js = "
@@ -80,13 +80,13 @@ impl Sandbox {
 
     pub fn run<S>(self, wasm_js: S, wasm_bin: S) -> Result<Self>
     where
-        S: AsRef<str>,
+        S: AsRef<Path>,
     {
-        log::info!("Running WASM {}", wasm_bin.as_ref());
+        log::info!("Running WASM {}", wasm_bin.as_ref().display());
 
         VFS.lock()
             .unwrap()
-            .map_file(wasm_bin.as_ref(), "/main.wasm")?;
+            .map_file(wasm_bin.as_ref(), Path::new("/main.wasm"))?;
 
         let mut js = "Module['wasmBinary'] = readFile('/main.wasm');".to_string();
         let wasm_js = hostfs::read_file(wasm_js.as_ref())?;
@@ -99,9 +99,9 @@ impl Sandbox {
 
     pub fn save_output_files<S, It>(self, output_path: S, output_files: It) -> Result<()>
     where
-        S: AsRef<str>,
+        S: AsRef<Path>,
         It: IntoIterator,
-        It::Item: AsRef<str>,
+        It::Item: AsRef<Path>,
     {
         for output_file in output_files {
             // sanitize output file path (may contain subdirs)

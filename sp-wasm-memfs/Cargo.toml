@@ -1,10 +1,10 @@
 [package]
 name = "sp-wasm-memfs"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Jakub Konka <jakub.konka@golem.network>"]
 edition = "2018"
 
 [dependencies]
 path-clean = "0.1"
 tool = "0.2"
-failure = "0.1"
+thiserror = "1"

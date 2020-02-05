@@ -1,71 +1,167 @@
 use super::VFS;
 use crate::Result;
-use mozjs::glue::SetBuildId;
-use mozjs::jsapi::BuildIdCharVector;
-use mozjs::jsapi::CallArgs;
-use mozjs::jsapi::CompartmentOptions;
-use mozjs::jsapi::ContextOptionsRef;
-use mozjs::jsapi::JSAutoCompartment;
-use mozjs::jsapi::JSContext;
-use mozjs::jsapi::JSObject;
-use mozjs::jsapi::JSString;
-use mozjs::jsapi::JS_DefineFunction;
-use mozjs::jsapi::JS_EncodeStringToUTF8;
-use mozjs::jsapi::JS_NewGlobalObject;
-use mozjs::jsapi::JS_ReportErrorASCII;
-use mozjs::jsapi::OnNewGlobalHookOption;
-use mozjs::jsapi::SetBuildIdOp;
-use mozjs::jsapi::Value;
-use mozjs::jsval::ObjectValue;
-use mozjs::jsval::UndefinedValue;
-use mozjs::rust::{Handle, JSEngine, Runtime, ToString, ToUint64, SIMPLE_GLOBAL_CLASS};
-use mozjs::typedarray::{ArrayBuffer, CreateWith};
-use std::ptr;
+use mozjs::{
+    glue::SetBuildId,
+    jsapi::{
+        BuildIdCharVector, CallArgs, CompartmentOptions, ContextOptionsRef, InitSelfHostedCode,
+        JSAutoCompartment, JSContext, JSGCParamKey, JSObject, JSString, JS_BeginRequest,
+        JS_DefineFunction, JS_DestroyContext, JS_EncodeStringToUTF8, JS_EndRequest, JS_NewContext,
+        JS_NewGlobalObject, JS_ReportErrorASCII, JS_SetGCParameter, JS_SetNativeStackQuota,
+        OnNewGlobalHookOption, RunJobs, SetBuildIdOp, UseInternalJobQueues, Value, JS,
+    },
+    jsval::{ObjectValue, UndefinedValue},
+    panic::maybe_resume_unwind,
+    rust::{
+        CompileOptionsWrapper, Handle, HandleObject, JSEngine, MutableHandleValue, ToString,
+        ToUint64, SIMPLE_GLOBAL_CLASS,
+    },
+    typedarray::{ArrayBuffer, CreateWith},
+};
+use std::{
+    ffi,
+    os::raw::c_uint,
+    ptr::{self, NonNull},
+    sync::Arc,
+};
+
+const STACK_QUOTA: usize = 128 * 8 * 1024;
+const SYSTEM_CODE_BUFFER: usize = 10 * 1024;
+const TRUSTED_SCRIPT_BUFFER: usize = 8 * 12800;
+
+unsafe fn new_root_context() -> Result<NonNull<JSContext>> {
+    let ctx = match NonNull::new(JS_NewContext(
+        32_u32 * 1024_u32 * 1024_u32,
+        1 << 20 as u32,
+        ptr::null_mut(),
+    )) {
+        Some(ctx) => ctx,
+        None => return Err(error::Error::SMNullPtr.into()),
+    };
+    let ctx_ptr = ctx.as_ptr();
+
+    JS_SetGCParameter(ctx_ptr, JSGCParamKey::JSGC_MAX_BYTES, std::u32::MAX);
+    JS_SetNativeStackQuota(
+        ctx_ptr,
+        STACK_QUOTA,
+        STACK_QUOTA - SYSTEM_CODE_BUFFER,
+        STACK_QUOTA - SYSTEM_CODE_BUFFER - TRUSTED_SCRIPT_BUFFER,
+    );
+    UseInternalJobQueues(ctx_ptr, false);
+    InitSelfHostedCode(ctx_ptr);
+    let contextopts = ContextOptionsRef(ctx_ptr);
+    (*contextopts).set_baseline_(true);
+    (*contextopts).set_ion_(true);
+    (*contextopts).set_nativeRegExp_(true);
+    (*contextopts).set_wasm_(true);
+    (*contextopts).set_wasmBaseline_(true);
+    (*contextopts).set_wasmIon_(true);
+    JS_BeginRequest(ctx_ptr);
+
+    Ok(ctx)
+}
+
+pub fn evaluate_script(
+    ctx: NonNull<JSContext>,
+    glob: HandleObject,
+    script: &str,
+    filename: &str,
+    line_num: u32,
+    rval: MutableHandleValue,
+) -> Option<()> {
+    let script_utf16: Vec<u16> = script.encode_utf16().collect();
+    let filename_cstr = ffi::CString::new(filename.as_bytes()).unwrap();
+    log::debug!(
+        "Evaluating script from {} with content {}",
+        filename,
+        script
+    );
+    // SpiderMonkey does not approve of null pointers.
+    let (ptr, len) = if script_utf16.len() == 0 {
+        static EMPTY: &'static [u16] = &[];
+        (EMPTY.as_ptr(), 0)
+    } else {
+        (script_utf16.as_ptr(), script_utf16.len() as c_uint)
+    };
+    assert!(!ptr.is_null());
+
+    let ctx = ctx.as_ptr();
+    let _ac = JSAutoCompartment::new(ctx, glob.get());
+    let options = CompileOptionsWrapper::new(ctx, filename_cstr.as_ptr(), line_num);
+
+    unsafe {
+        if !JS::Evaluate2(
+            ctx,
+            options.ptr,
+            ptr as *const u16,
+            len as libc::size_t,
+            rval.into(),
+        ) {
+            log::debug!("...err!");
+            maybe_resume_unwind();
+            None
+        } else {
+            // we could return the script result but then we'd have
+            // to root it and so forth and, really, who cares?
+            log::debug!("...ok!");
+            Some(())
+        }
+    }
+}
 
 pub struct Engine {
-    runtime: Runtime,
-    global: *mut JSObject,
+    _engine: Arc<JSEngine>,
+    ctx: NonNull<JSContext>,
+    global: NonNull<JSObject>,
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        let ctx = self.ctx.as_ptr();
+        unsafe {
+            JS_EndRequest(ctx);
+            JS_DestroyContext(ctx);
+        }
+    }
 }
 
 impl Engine {
     pub fn new() -> Result<Self> {
         log::info!("Initializing SpiderMonkey engine");
         let engine = JSEngine::init().map_err(error::Error::from)?;
-        let runtime = Runtime::new(engine);
 
         unsafe {
-            let engine = Self::create_with(runtime)?;
+            let ctx = new_root_context()?;
+            let engine = Self::create_with(engine, ctx)?;
             Ok(engine)
         }
     }
 
-    unsafe fn create_with(runtime: Runtime) -> Result<Self> {
+    unsafe fn create_with(_engine: Arc<JSEngine>, ctx: NonNull<JSContext>) -> Result<Self> {
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
         let c_option = CompartmentOptions::default();
-        let ctx = runtime.cx();
+        let ctx_ptr = ctx.as_ptr();
 
-        let global = JS_NewGlobalObject(
-            ctx,
+        let global = match NonNull::new(JS_NewGlobalObject(
+            ctx_ptr,
             &SIMPLE_GLOBAL_CLASS,
             ptr::null_mut(),
             h_option,
             &c_option,
-        );
+        )) {
+            Some(global) => global,
+            None => return Err(error::Error::SMNullPtr.into()),
+        };
 
-        // runtime options
-        let ctx_opts = &mut *ContextOptionsRef(ctx);
-        ctx_opts.set_wasm_(true);
-        ctx_opts.set_wasmBaseline_(true);
-        ctx_opts.set_wasmIon_(true);
-        SetBuildIdOp(ctx, Some(Self::sp_build_id));
+        SetBuildIdOp(ctx_ptr, Some(Self::sp_build_id));
 
         // callbacks
-        rooted!(in(ctx) let global_root = global);
+        let global_ptr = global.as_ptr();
+        rooted!(in(ctx_ptr) let global_root = global_ptr);
         let gl = global_root.handle();
-        let _ac = JSAutoCompartment::new(ctx, gl.get());
+        let _ac = JSAutoCompartment::new(ctx_ptr, gl.get());
 
         JS_DefineFunction(
-            ctx,
+            ctx_ptr,
             gl.into(),
             b"print\0".as_ptr() as *const libc::c_char,
             Some(Self::print),
@@ -74,7 +170,7 @@ impl Engine {
         );
 
         JS_DefineFunction(
-            ctx,
+            ctx_ptr,
             gl.into(),
             b"usleep\0".as_ptr() as *const libc::c_char,
             Some(Self::usleep),
@@ -83,7 +179,7 @@ impl Engine {
         );
 
         JS_DefineFunction(
-            ctx,
+            ctx_ptr,
             gl.into(),
             b"readFile\0".as_ptr() as *const libc::c_char,
             Some(Self::read_file),
@@ -92,7 +188,7 @@ impl Engine {
         );
 
         JS_DefineFunction(
-            ctx,
+            ctx_ptr,
             gl.into(),
             b"writeFile\0".as_ptr() as *const libc::c_char,
             Some(Self::write_file),
@@ -102,7 +198,7 @@ impl Engine {
 
         // init print funcs
         Self::eval(
-            &runtime,
+            ctx,
             global,
             "var Module = {
                 'printErr': print,
@@ -112,7 +208,7 @@ impl Engine {
 
         // init /dev/random emulation
         Self::eval(
-            &runtime,
+            ctx,
             global,
             "var golem_MAGIC = 0;
             golem_randEmu = function() {
@@ -129,7 +225,7 @@ impl Engine {
 
         // make time ops fully deterministic
         Self::eval(
-            &runtime,
+            ctx,
             global,
             "
               var date = new Date(0);
@@ -138,27 +234,36 @@ impl Engine {
              ",
         )?;
 
-        Ok(Self { runtime, global })
+        Ok(Self {
+            _engine,
+            ctx,
+            global,
+        })
     }
 
-    unsafe fn eval<S>(runtime: &Runtime, global: *mut JSObject, script: S) -> Result<Value>
+    unsafe fn eval<S>(
+        ctx: NonNull<JSContext>,
+        global: NonNull<JSObject>,
+        script: S,
+    ) -> Result<Value>
     where
         S: AsRef<str>,
     {
-        let ctx = runtime.cx();
+        let ctx_ptr = ctx.as_ptr();
+        let global = global.as_ptr();
 
-        rooted!(in(ctx) let global_root = global);
+        rooted!(in(ctx_ptr) let global_root = global);
         let global = global_root.handle();
-        let _ac = JSAutoCompartment::new(ctx, global.get());
+        let _ac = JSAutoCompartment::new(ctx_ptr, global.get());
 
-        rooted!(in(ctx) let mut rval = UndefinedValue());
+        rooted!(in(ctx_ptr) let mut rval = UndefinedValue());
 
-        if runtime
-            .evaluate_script(global, script.as_ref(), "noname", 0, rval.handle_mut())
-            .is_err()
+        if let None = evaluate_script(ctx, global, script.as_ref(), "noname", 0, rval.handle_mut())
         {
-            return Err(error::Error::SMJS(error::JSError::new(ctx)).into());
+            return Err(error::Error::SMJS(error::JSError::new(ctx_ptr)).into());
         }
+
+        RunJobs(ctx_ptr);
 
         Ok(rval.get())
     }
@@ -168,7 +273,7 @@ impl Engine {
         S: AsRef<str>,
     {
         log::debug!("Evaluating script {}", script.as_ref());
-        unsafe { Self::eval(&self.runtime, self.global, script) }
+        unsafe { Self::eval(self.ctx, self.global, script) }
     }
 
     unsafe extern "C" fn sp_build_id(build_id: *mut BuildIdCharVector) -> bool {
@@ -328,31 +433,18 @@ pub mod error {
     use mozjs::rust::JSEngineError;
     use std::slice;
 
-    #[derive(Debug, Fail)]
+    #[derive(Debug, thiserror::Error, PartialEq)]
     pub enum Error {
-        #[fail(display = "couldn't convert &[u8] to Uint8Array")]
+        #[error("couldn't convert &[u8] to Uint8Array")]
         SliceToUint8ArrayConversion,
-
-        #[fail(display = "couldn't convert Uint8Array to Vec<u8>")]
+        #[error("couldn't convert Uint8Array to Vec<u8>")]
         Uint8ArrayToVecConversion,
-
-        #[fail(display = "SpiderMonkey internal error")]
+        #[error("SpiderMonkey internal error")]
         SMInternal,
-
-        #[fail(display = "{}", _0)]
-        SMJS(#[cause] JSError),
-    }
-
-    impl PartialEq for Error {
-        fn eq(&self, other: &Error) -> bool {
-            match (self, other) {
-                (&Error::SliceToUint8ArrayConversion, &Error::SliceToUint8ArrayConversion) => true,
-                (&Error::Uint8ArrayToVecConversion, &Error::Uint8ArrayToVecConversion) => true,
-                (&Error::SMInternal, &Error::SMInternal) => true,
-                (&Error::SMJS(ref left), &Error::SMJS(ref right)) => left == right,
-                (_, _) => false,
-            }
-        }
+        #[error("Null pointer exception")]
+        SMNullPtr,
+        #[error("{0}")]
+        SMJS(#[from] JSError),
     }
 
     impl From<JSEngineError> for Error {
@@ -361,14 +453,8 @@ pub mod error {
         }
     }
 
-    impl From<JSError> for Error {
-        fn from(err: JSError) -> Self {
-            Error::SMJS(err)
-        }
-    }
-
-    #[derive(Debug, PartialEq, Fail)]
-    #[fail(display = "JavaScript error: {}", message)]
+    #[derive(Debug, PartialEq, thiserror::Error)]
+    #[error("JavaScript error: {message}")]
     pub struct JSError {
         pub message: String,
     }
