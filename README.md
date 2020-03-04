@@ -50,18 +50,18 @@ int main(int argc, char** argv) {
   size_t len = 0;
   char* line = NULL;
   ssize_t read;
-  
+
   FILE* f_in = fopen("in.txt", "r");
   FILE* f_out = fopen("out.txt", "w");
-  
+
   while ((read = getline(&line, &len, f_in)) != -1)
       fprintf(f_out, "%s\n", line);
-  
+
   fprintf(f_out, "%s\n", name);
-  
+
   fclose(f_out);
   fclose(f_in);
-  
+
   return 0;
 }
 ```
@@ -147,7 +147,7 @@ have Emscripten SDK installed on your
 system. For instructions on how to do it, see
 [here](https://emscripten.org/docs/getting_started/downloads.html).
 
-Now, we can compile our Rust program to Wasm. Make sure you are in 
+Now, we can compile our Rust program to Wasm. Make sure you are in
 the root of your Rust crate, i.e., at the top of `simple`
 if you didn't change the name of your crate, and run
 ```
@@ -285,13 +285,13 @@ for detailed building instructions.
 After following the aforementioned instructions, to build the sandbox, run
 
 ```
-$ cargo +1.38.0 build
+$ cargo +1.38.0 build --release
 ```
 
 If you would like to build with SpiderMonkey's debug symbols and extensive logging, run instead
 
 ```
-$ cargo +1.38.0 build --features "debugmozjs"
+$ cargo +1.38.0 build --release --features "debugmozjs"
 ```
 
 ### Natively on other OSes
