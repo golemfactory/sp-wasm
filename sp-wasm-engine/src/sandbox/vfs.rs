@@ -1,5 +1,4 @@
-use super::Result;
-use crate::error::Error;
+use crate::{Error, Result};
 use sp_wasm_memfs::prelude::*;
 use std::collections::VecDeque;
 use std::fs;
@@ -127,7 +126,8 @@ impl Default for VirtualFS {
 }
 
 pub mod hostfs {
-    use super::Result;
+    use crate::error::FileContext;
+    use crate::Result;
 
     use std::fs;
     use std::io::{Read, Write};
@@ -139,9 +139,9 @@ pub mod hostfs {
     where
         P: AsRef<path::Path>,
     {
-        let mut file = fs::File::open(path)?;
+        let mut file = fs::File::open(&path).file_context(&path)?;
         let mut contents = Vec::new();
-        file.read_to_end(&mut contents)?;
+        file.read_to_end(&mut contents).file_context(&path)?;
 
         Ok(contents)
     }
