@@ -1,3 +1,4 @@
+use crate::error::FileContext;
 use crate::{Error, Result};
 use sp_wasm_memfs::prelude::*;
 use std::collections::VecDeque;
@@ -20,7 +21,7 @@ impl VirtualFS {
     {
         let mut file = self.backend.open_file(path.as_ref())?;
         let mut contents = Vec::new();
-        file.read_to_end(&mut contents)?;
+        file.read_to_end(&mut contents).file_context(&path)?;
 
         Ok(contents)
     }
@@ -31,7 +32,7 @@ impl VirtualFS {
     {
         log::debug!("Writing file={:?}", path.as_ref());
         let mut file = self.backend.create_file(path.as_ref())?;
-        file.write_all(contents)?;
+        file.write_all(contents).file_context(&path)?;
 
         Ok(())
     }
@@ -70,8 +71,8 @@ impl VirtualFS {
         let source_path = source_path.as_ref().to_owned();
         let mut fifo = VecDeque::new();
 
-        for entry in fs::read_dir(source_path)? {
-            let entry = entry?;
+        for entry in fs::read_dir(&source_path).file_context(&source_path)? {
+            let entry = entry.file_context(&source_path)?;
             let source_path = entry.path();
 
             let mut dest_path = dest_path.clone();
@@ -96,8 +97,8 @@ impl VirtualFS {
                 self.backend.create_dir(dest_path.as_path())?;
                 log::debug!("mapped dir = {:?}", dest_path);
 
-                for entry in fs::read_dir(source_path)? {
-                    let entry = entry?;
+                for entry in fs::read_dir(&source_path).file_context(&source_path)? {
+                    let entry = entry.file_context(&source_path)?;
                     let source_path = entry.path();
 
                     let mut dest_path = dest_path.clone();
@@ -150,8 +151,8 @@ pub mod hostfs {
     where
         P: AsRef<path::Path>,
     {
-        let mut file = fs::File::create(path.as_ref())?;
-        file.write_all(contents)?;
+        let mut file = fs::File::create(path.as_ref()).file_context(&path)?;
+        file.write_all(contents).file_context(&path)?;
 
         Ok(())
     }
@@ -160,7 +161,7 @@ pub mod hostfs {
     where
         P: AsRef<path::Path>,
     {
-        fs::create_dir_all(path)?;
+        fs::create_dir_all(&path).file_context(&path)?;
 
         Ok(())
     }
