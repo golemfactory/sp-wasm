@@ -9,9 +9,7 @@ ENV SHELL=/bin/bash
 ENV CC=clang-6.0
 ENV CPP="clang-6.0 -E"
 ENV CXX=clang++-6.0
-WORKDIR /sp-wasm/sp-wasm-cli
 RUN cargo install --path .
-WORKDIR /sp-wasm
 RUN cargo clean
 
 ENTRYPOINT ["wasm-sandbox"]
