@@ -6,10 +6,11 @@ use self::vfs::*;
 use super::Result;
 
 use std::path::{self, Path};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use mozjs::rust::JSEngine;
 
 lazy_static! {
     static ref VFS: Mutex<VirtualFS> = Mutex::new(VirtualFS::default());
@@ -20,8 +21,8 @@ pub struct Sandbox {
 }
 
 impl Sandbox {
-    pub fn new() -> Result<Self> {
-        let engine = Engine::new()?;
+    pub fn new(js_engine: Arc<JSEngine>) -> Result<Self> {
+        let engine = Engine::new(js_engine)?;
 
         Ok(Self { engine })
     }

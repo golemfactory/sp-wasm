@@ -109,7 +109,6 @@ pub fn evaluate_script(
 }
 
 pub struct Engine {
-    _engine: Arc<JSEngine>,
     ctx: NonNull<JSContext>,
     global: NonNull<JSObject>,
 }
@@ -125,18 +124,16 @@ impl Drop for Engine {
 }
 
 impl Engine {
-    pub fn new() -> Result<Self> {
-        log::info!("Initializing SpiderMonkey engine");
-        let engine = JSEngine::init().map_err(error::Error::from)?;
-
+    pub fn new(_js_engine: Arc<JSEngine>) -> Result<Self> {
+        log::info!("Creating new Engine instance");
         unsafe {
             let ctx = new_root_context()?;
-            let engine = Self::create_with(engine, ctx)?;
+            let engine = Self::create_with(ctx)?;
             Ok(engine)
         }
     }
 
-    unsafe fn create_with(_engine: Arc<JSEngine>, ctx: NonNull<JSContext>) -> Result<Self> {
+    unsafe fn create_with(ctx: NonNull<JSContext>) -> Result<Self> {
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
         let c_option = CompartmentOptions::default();
         let ctx_ptr = ctx.as_ptr();
@@ -234,11 +231,7 @@ impl Engine {
              ",
         )?;
 
-        Ok(Self {
-            _engine,
-            ctx,
-            global,
-        })
+        Ok(Self { ctx, global })
     }
 
     unsafe fn eval<S>(
