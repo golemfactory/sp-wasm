@@ -3,6 +3,12 @@ name = "sp-wasm-memfs"
 version = "0.2.0"
 authors = ["Jakub Konka <jakub.konka@golem.network>"]
 edition = "2018"
+license = "GPL-3.0"
+readme = "README coming soon..."
+repository = "https://github.com/golemfactory/sp-wasm"
+homepage = "https://github.com/golemfactory/sp-wasm"
+documentation = "https://docs.rs/sp-wasm-memfs"
+description = "Memory FS for Golem's sp-wasm sandbox"
 
 [dependencies]
 path-clean = "0.1"
