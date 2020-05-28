@@ -3,6 +3,12 @@ name = "sp-wasm-engine"
 version = "0.3.0"
 authors = ["Jakub Konka <jakub.konka@golem.network>"]
 edition = "2018"
+license = "GPL-3.0"
+readme = "README coming soon..."
+repository = "https://github.com/golemfactory/sp-wasm"
+homepage = "https://github.com/golemfactory/sp-wasm"
+documentation = "https://docs.rs/sp-wasm-engine"
+description = "Runtime/engine of Golem's sp-wasm sandbox"
 
 [dependencies]
 sp-wasm-memfs = { path = "../sp-wasm-memfs"}
