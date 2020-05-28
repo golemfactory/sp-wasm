@@ -11,7 +11,7 @@ documentation = "https://docs.rs/sp-wasm-engine"
 description = "Runtime/engine of Golem's sp-wasm sandbox"
 
 [dependencies]
-sp-wasm-memfs = { path = "../sp-wasm-memfs"}
+sp-wasm-memfs = { path = "../sp-wasm-memfs", version = "0.2.0" }
 libc = "0.2"
 mozjs = "0.10"
 log = "0.4"
