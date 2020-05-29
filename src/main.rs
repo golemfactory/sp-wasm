@@ -36,7 +36,12 @@ fn main() {
     let opts = Opts::from_args();
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
 
-    Sandbox::new()
+    let engine = Engine::new().unwrap_or_else(|err| {
+        eprintln!("{}", err);
+        std::process::exit(1)
+    });
+
+    Sandbox::new(&engine)
         .and_then(|sandbox| sandbox.set_exec_args(opts.args.iter()))
         .and_then(|sandbox| sandbox.load_input_files(&opts.input_dir))
         .and_then(|sandbox| sandbox.run(&opts.wasm_js, &opts.wasm_bin))

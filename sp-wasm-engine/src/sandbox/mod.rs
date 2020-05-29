@@ -6,25 +6,23 @@ use self::vfs::*;
 use super::Result;
 
 use std::path::{self, Path};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use mozjs::rust::JSEngine;
 
 lazy_static! {
     static ref VFS: Mutex<VirtualFS> = Mutex::new(VirtualFS::default());
 }
 
 pub struct Sandbox {
-    engine: Engine,
+    runtime: Runtime,
 }
 
 impl Sandbox {
-    pub fn new(js_engine: Arc<JSEngine>) -> Result<Self> {
-        let engine = Engine::new(js_engine)?;
-
-        Ok(Self { engine })
+    pub fn new(engine: &Engine) -> Result<Self> {
+        let runtime = Runtime::new(engine)?;
+        Ok(Self { runtime })
     }
 
     pub fn set_exec_args<It>(self, exec_args: It) -> Result<Self>
@@ -39,7 +37,7 @@ impl Sandbox {
         log::info!("Setting exec args [ {} ]", exec_args);
 
         let js = format!("Module['arguments'] = [ {} ];", exec_args);
-        self.engine.evaluate_script(&js)?;
+        self.runtime.evaluate_script(&js)?;
 
         Ok(self)
     }
@@ -74,7 +72,7 @@ impl Sandbox {
             })?;
 
         js += "\n};";
-        self.engine.evaluate_script(&js)?;
+        self.runtime.evaluate_script(&js)?;
 
         Ok(self)
     }
@@ -93,7 +91,7 @@ impl Sandbox {
         let wasm_js = hostfs::read_file(wasm_js.as_ref())?;
         let wasm_js = String::from_utf8(wasm_js)?;
         js += &wasm_js;
-        self.engine.evaluate_script(&js)?;
+        self.runtime.evaluate_script(&js)?;
 
         Ok(self)
     }
@@ -118,7 +116,7 @@ impl Sandbox {
 
             // copy files from JS_FS to MemFS
             let output_vfs_path_str: String = output_vfs_path.as_path().to_string_lossy().into();
-            self.engine.evaluate_script(&format!(
+            self.runtime.evaluate_script(&format!(
                 "
                 try {{
                     writeFile('{}', FS.readFile('{}'));
@@ -151,7 +149,7 @@ impl Sandbox {
         Ok(())
     }
 
-    pub fn engine(&self) -> &Engine {
-        &self.engine
+    pub fn runtime(&self) -> &Runtime {
+        &self.runtime
     }
 }

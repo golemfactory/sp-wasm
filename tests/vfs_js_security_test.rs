@@ -6,7 +6,8 @@ use std::path;
 #[test]
 fn vfs_js_security() {
     let engine = Engine::new().unwrap();
-    let result = engine.evaluate_script("writeFile('/tmp/test.txt', new Uint8Array(2))");
+    let runtime = Runtime::new(&engine).unwrap();
+    let result = runtime.evaluate_script("writeFile('/tmp/test.txt', new Uint8Array(2))");
 
     assert!(result.is_err());
     assert!(!path::Path::new("/tmp/test.txt").is_file());

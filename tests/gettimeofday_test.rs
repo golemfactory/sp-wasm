@@ -31,7 +31,8 @@ fn gettimeofday_impl() -> Result<(), String> {
     output_dir.push("out/");
     fs::create_dir(output_dir.as_path()).map_err(|err| err.to_string())?;
 
-    Sandbox::new()
+    let engine = Engine::new().map_err(|err| err.to_string())?;
+    Sandbox::new(&engine)
         .and_then(|sandbox| sandbox.load_input_files(input_dir.to_str().unwrap()))
         .and_then(|sandbox| sandbox.run(js.to_str().unwrap(), wasm.to_str().unwrap()))
         .and_then(|sandbox| {
