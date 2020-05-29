@@ -2,7 +2,8 @@ use sp_wasm_engine::prelude::*;
 
 #[test]
 fn random_device_determinism() {
-    let start = Engine::new()
+    let engine = Engine::new().unwrap();
+    let start = Runtime::new(&engine)
         .unwrap()
         .evaluate_script("golem_randEmu()")
         .unwrap()

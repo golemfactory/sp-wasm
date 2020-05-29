@@ -1,6 +1,6 @@
 [package]
 name = "sp-wasm-engine"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Jakub Konka <jakub.konka@golem.network>"]
 edition = "2018"
 license = "GPL-3.0"

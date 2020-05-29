@@ -19,6 +19,7 @@ use mozjs::{
 };
 use std::{
     ffi,
+    ops::Deref,
     os::raw::c_uint,
     ptr::{self, NonNull},
     sync::Arc,
@@ -108,13 +109,31 @@ pub fn evaluate_script(
     }
 }
 
-pub struct Engine {
-    _engine: Arc<JSEngine>,
+#[derive(Clone)]
+pub struct Engine(Arc<JSEngine>);
+
+impl Engine {
+    pub fn new() -> Result<Self> {
+        log::info!("Initializing SpiderMonkey engine");
+        let engine = JSEngine::init().map_err(error::Error::from)?;
+        Ok(Self(engine))
+    }
+}
+
+impl Deref for Engine {
+    type Target = Arc<JSEngine>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub struct Runtime {
     ctx: NonNull<JSContext>,
     global: NonNull<JSObject>,
 }
 
-impl Drop for Engine {
+impl Drop for Runtime {
     fn drop(&mut self) {
         let ctx = self.ctx.as_ptr();
         unsafe {
@@ -124,19 +143,17 @@ impl Drop for Engine {
     }
 }
 
-impl Engine {
-    pub fn new() -> Result<Self> {
-        log::info!("Initializing SpiderMonkey engine");
-        let engine = JSEngine::init().map_err(error::Error::from)?;
-
+impl Runtime {
+    pub fn new(_engine: &Engine) -> Result<Self> {
+        log::info!("Creating new Runtime instance");
         unsafe {
             let ctx = new_root_context()?;
-            let engine = Self::create_with(engine, ctx)?;
-            Ok(engine)
+            let rt = Self::create_with(ctx)?;
+            Ok(rt)
         }
     }
 
-    unsafe fn create_with(_engine: Arc<JSEngine>, ctx: NonNull<JSContext>) -> Result<Self> {
+    unsafe fn create_with(ctx: NonNull<JSContext>) -> Result<Self> {
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
         let c_option = CompartmentOptions::default();
         let ctx_ptr = ctx.as_ptr();
@@ -234,11 +251,7 @@ impl Engine {
              ",
         )?;
 
-        Ok(Self {
-            _engine,
-            ctx,
-            global,
-        })
+        Ok(Self { ctx, global })
     }
 
     unsafe fn eval<S>(
