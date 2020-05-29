@@ -19,10 +19,10 @@ use mozjs::{
 };
 use std::{
     ffi,
+    ops::Deref,
     os::raw::c_uint,
     ptr::{self, NonNull},
     sync::Arc,
-    ops::Deref,
 };
 
 const STACK_QUOTA: usize = 128 * 8 * 1024;
